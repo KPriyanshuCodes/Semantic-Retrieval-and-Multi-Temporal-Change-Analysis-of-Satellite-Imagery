@@ -1,0 +1,6 @@
+{
+  "name": "GeoSemantic: Satellite Change Analysis",
+  "description": "Semantic retrieval and multi-temporal change detection pipeline for Sentinel-2 satellite imagery using Copernicus Data Space Ecosystem STAC API.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
