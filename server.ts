@@ -1,5 +1,4 @@
 import express from 'express';
-import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
@@ -10,6 +9,15 @@ const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 app.use(express.json({ limit: '10mb' }));
+
+// Support Vercel serverless functions where URL path might be rewritten without /api prefix
+app.use((req, res, next) => {
+  const knownPrefixes = ['/search', '/geocode', '/satellite', '/analysis', '/history', '/consent', '/health'];
+  if (req.url && knownPrefixes.some(prefix => req.url === prefix || req.url.startsWith(prefix + '/') || req.url.startsWith(prefix + '?'))) {
+    req.url = '/api' + req.url;
+  }
+  next();
+});
 
 // In-memory persistent store for history & consent (privacy-friendly, exportable & deletable)
 interface AnalysisRecord {
@@ -1055,24 +1063,33 @@ app.get('/api/health', (req, res) => {
 // ----------------------------------------------------
 // Vite Middleware or Static Production File Serving
 // ----------------------------------------------------
-async function startServer() {
-  if (process.env.NODE_ENV !== 'production') {
+export async function startServer() {
+  if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
-  } else {
-    const distPath = path.resolve('dist');
+  } else if (!process.env.VERCEL) {
+    const distPath = path.resolve(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🛰️ GeoSemantic Server active on http://0.0.0.0:${PORT}`);
-  });
+  if (!process.env.VERCEL) {
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`🛰️ GeoSemantic Server active on http://0.0.0.0:${PORT}`);
+    });
+  }
 }
 
-startServer();
+// In local / standard Node / container environments, automatically start the server
+if (!process.env.VERCEL) {
+  startServer();
+}
+
+export { app };
+export default app;
