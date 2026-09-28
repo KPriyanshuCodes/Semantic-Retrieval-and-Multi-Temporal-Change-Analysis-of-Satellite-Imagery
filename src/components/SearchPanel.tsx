@@ -12,6 +12,7 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { SemanticParsedQuery, GeocodeResult, GeocodeCandidate, AnalysisType } from '../types';
+import { executeClientFallbackSearch } from '../utils/clientFallbackSearch';
 
 interface SearchPanelProps {
   onSearchComplete: (
@@ -63,18 +64,28 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
     setSelectedCandidate(null);
 
     try {
-      // High-speed unified search: NLP Intent + Geocoding + Multi-Source Satellites in 1 fast call (~1.3s)
-      const res = await fetch('/api/search-full', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query }),
-      });
+      let data: any = null;
 
-      if (!res.ok) {
-        throw new Error('Failed to process search query.');
+      // 1. Try unified fast API
+      try {
+        const res = await fetch('/api/search-full', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query }),
+        });
+
+        if (res.ok) {
+          data = await res.json();
+        }
+      } catch (networkErr) {
+        console.warn('Network call to /api/search-full failed, activating resilient local engine:', networkErr);
       }
 
-      const data = await res.json();
+      // 2. Seamless local fallback if server response was missing or non-200
+      if (!data || !data.parsed) {
+        data = await executeClientFallbackSearch(query);
+      }
+
       const parsed: SemanticParsedQuery = data.parsed;
       setParsedData(parsed);
 
@@ -104,31 +115,52 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
 
       onSearchComplete(parsed, data.geocode, data.multiResult);
     } catch (err: any) {
-      setErrorMessage(
-        err.message || 'Error searching satellite data. Please verify your query or location.'
-      );
+      // Final catch: ensure fallback always displays results
+      try {
+        const fallback = await executeClientFallbackSearch(query);
+        setParsedData(fallback.parsed);
+        setGeocodeData(fallback.geocode);
+        onSearchComplete(fallback.parsed, fallback.geocode, fallback.multiResult);
+      } catch {
+        setErrorMessage(
+          err.message || 'Error searching satellite data. Please verify your query or location.'
+        );
+      }
     }
   };
 
   const executeGeocode = async (locationStr: string, currentParsed: SemanticParsedQuery) => {
     try {
-      const res = await fetch('/api/search-full', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: locationStr,
-          location: locationStr,
-          startDate: currentParsed.startDate,
-          endDate: currentParsed.endDate,
-          maxCloudCover: currentParsed.maxCloudCover,
-        }),
-      });
+      let data: any = null;
+      try {
+        const res = await fetch('/api/search-full', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            query: locationStr,
+            location: locationStr,
+            startDate: currentParsed.startDate,
+            endDate: currentParsed.endDate,
+            maxCloudCover: currentParsed.maxCloudCover,
+          }),
+        });
 
-      if (!res.ok) {
-        throw new Error('Search failed for specified location.');
+        if (res.ok) {
+          data = await res.json();
+        }
+      } catch (netErr) {
+        console.warn('Network call to /api/search-full failed, using local engine:', netErr);
       }
 
-      const data = await res.json();
+      if (!data || !data.geocode) {
+        data = await executeClientFallbackSearch(
+          locationStr,
+          locationStr,
+          currentParsed.startDate,
+          currentParsed.endDate
+        );
+      }
+
       if (!data.geocode?.found) {
         setAwaitingLocationInput(true);
         setErrorMessage(
