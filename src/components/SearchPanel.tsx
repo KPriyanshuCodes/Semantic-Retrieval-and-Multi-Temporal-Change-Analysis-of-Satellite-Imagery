@@ -63,34 +63,46 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
     setSelectedCandidate(null);
 
     try {
-      // 1. Natural Language Intent Parsing
-      const parseRes = await fetch('/api/search', {
+      // High-speed unified search: NLP Intent + Geocoding + Multi-Source Satellites in 1 fast call (~1.3s)
+      const res = await fetch('/api/search-full', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query }),
       });
 
-      if (!parseRes.ok) {
+      if (!res.ok) {
         throw new Error('Failed to process search query.');
       }
 
-      const parseJson = await parseRes.json();
-      const parsed: SemanticParsedQuery = parseJson.parsed;
+      const data = await res.json();
+      const parsed: SemanticParsedQuery = data.parsed;
       setParsedData(parsed);
 
       setOverrideStartDate(parsed.startDate);
       setOverrideEndDate(parsed.endDate);
       setOverrideType(parsed.analysisType);
 
-      // 2. Validate location existence from query
+      // Validate location existence from query
       if (!parsed.location || !parsed.location.trim()) {
         setAwaitingLocationInput(true);
         setErrorMessage('Please specify the city or region you want to analyze.');
         return;
       }
 
-      // 3. Geocoding
-      await executeGeocode(parsed.location, parsed);
+      if (!data.geocode?.found) {
+        setAwaitingLocationInput(true);
+        setErrorMessage(
+          data.geocode?.error || `Could not find coordinates for "${parsed.location}". Please check spelling.`
+        );
+        return;
+      }
+
+      setGeocodeData(data.geocode);
+      if (data.geocode.candidates && data.geocode.candidates.length > 0) {
+        setSelectedCandidate(data.geocode.candidates[0]);
+      }
+
+      onSearchComplete(parsed, data.geocode, data.multiResult);
     } catch (err: any) {
       setErrorMessage(
         err.message || 'Error searching satellite data. Please verify your query or location.'
@@ -100,45 +112,37 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
 
   const executeGeocode = async (locationStr: string, currentParsed: SemanticParsedQuery) => {
     try {
-      const geoRes = await fetch('/api/geocode', {
+      const res = await fetch('/api/search-full', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ place: locationStr }),
+        body: JSON.stringify({
+          query: locationStr,
+          location: locationStr,
+          startDate: currentParsed.startDate,
+          endDate: currentParsed.endDate,
+          maxCloudCover: currentParsed.maxCloudCover,
+        }),
       });
 
-      if (!geoRes.ok) {
-        throw new Error('Geocoding service unavailable for specified location.');
+      if (!res.ok) {
+        throw new Error('Search failed for specified location.');
       }
 
-      const geoJson: GeocodeResult = await geoRes.json();
-      if (!geoJson.found) {
+      const data = await res.json();
+      if (!data.geocode?.found) {
         setAwaitingLocationInput(true);
         setErrorMessage(
-          geoJson.error || `Could not find coordinates for "${locationStr}". Please check spelling.`
+          data.geocode?.error || `Could not find coordinates for "${locationStr}". Please check spelling.`
         );
         return;
       }
 
-      setGeocodeData(geoJson);
-      if (geoJson.candidates && geoJson.candidates.length > 0) {
-        setSelectedCandidate(geoJson.candidates[0]);
+      setGeocodeData(data.geocode);
+      if (data.geocode.candidates && data.geocode.candidates.length > 0) {
+        setSelectedCandidate(data.geocode.candidates[0]);
       }
 
-      // Automatically search both Sentinel-2 and Landsat in parallel
-      const multiRes = await fetch('/api/satellite/multi-search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          bbox: geoJson.bbox,
-          startDate: currentParsed.startDate,
-          endDate: currentParsed.endDate,
-          maxCloudCover: currentParsed.maxCloudCover,
-          location: geoJson.place,
-        }),
-      });
-      const multiData = await multiRes.json();
-
-      onSearchComplete(currentParsed, geoJson, multiData);
+      onSearchComplete(currentParsed, data.geocode, data.multiResult);
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to search satellite catalogs.');
     }
