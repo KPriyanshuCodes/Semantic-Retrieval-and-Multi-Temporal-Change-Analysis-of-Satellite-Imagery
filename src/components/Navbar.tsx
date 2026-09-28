@@ -54,7 +54,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             <Compass className="w-4 h-4 text-slate-500" />
-            <span>Search & AOI</span>
+            <span>1. Search</span>
           </button>
 
           <button
@@ -66,7 +66,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             <Database className="w-4 h-4 text-slate-500" />
-            <span>Satellite Catalog</span>
+            <span>2. Available Images</span>
           </button>
 
           <button
@@ -78,7 +78,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             <Layers className="w-4 h-4 text-slate-500" />
-            <span>Change Map</span>
+            <span>3. Change Results</span>
           </button>
 
           <button
@@ -90,7 +90,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             <History className="w-4 h-4 text-slate-500" />
-            <span>Audit History</span>
+            <span>History</span>
           </button>
 
           <button
@@ -102,7 +102,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             <ShieldCheck className="w-4 h-4 text-slate-500" />
-            <span>DPDP & Privacy</span>
+            <span>Privacy</span>
           </button>
         </nav>
 

@@ -4,6 +4,7 @@ import {
   Map,
   Rectangle,
   Polygon,
+  Marker,
   useMap,
 } from '@vis.gl/react-google-maps';
 import { AnalysisResult, SatelliteScene } from '../types';
@@ -17,16 +18,20 @@ interface GoogleGeospatialMapProps {
   selectedGridCell: any | null;
   onSelectGridCell: (cell: any | null) => void;
   mapType: 'hybrid' | 'satellite' | 'roadmap' | 'terrain';
+  visualizationMode?: 'change' | 'before' | 'after' | 'swipe';
   showChangeLayer: boolean;
   showAoiLayer: boolean;
   layerOpacity: number;
+  resetBoundsSignal?: number;
 }
 
 // Controller component to smoothly pan and fit bounds
 function MapBoundsController({
   aoiBbox,
+  resetBoundsSignal,
 }: {
   aoiBbox: [number, number, number, number] | null;
+  resetBoundsSignal?: number;
 }) {
   const map = useMap();
 
@@ -42,7 +47,7 @@ function MapBoundsController({
       },
       40
     );
-  }, [map, aoiBbox]);
+  }, [map, aoiBbox, resetBoundsSignal]);
 
   return null;
 }
@@ -50,29 +55,49 @@ function MapBoundsController({
 export const GoogleGeospatialMap: React.FC<GoogleGeospatialMapProps> = ({
   apiKey,
   aoiBbox,
+  beforeScene,
+  afterScene,
   analysisResult,
   selectedGridCell,
   onSelectGridCell,
   mapType,
+  visualizationMode = 'change',
   showChangeLayer,
   showAoiLayer,
   layerOpacity,
+  resetBoundsSignal,
 }) => {
-  const centerLat = aoiBbox ? (aoiBbox[1] + aoiBbox[3]) / 2 : 28.6139;
-  const centerLng = aoiBbox ? (aoiBbox[0] + aoiBbox[2]) / 2 : 77.209;
+  const centerLat = aoiBbox ? (aoiBbox[1] + aoiBbox[3]) / 2 : 22.9734;
+  const centerLng = aoiBbox ? (aoiBbox[0] + aoiBbox[2]) / 2 : 78.6569;
+
+  const shouldRenderPolygons =
+    showChangeLayer &&
+    visualizationMode === 'change' &&
+    Boolean(analysisResult?.changeFeaturesGeoJson);
 
   return (
     <APIProvider apiKey={apiKey}>
       <Map
         style={{ width: '100%', height: '100%' }}
         defaultCenter={{ lat: centerLat, lng: centerLng }}
-        defaultZoom={10}
+        defaultZoom={aoiBbox ? 11 : 5}
         mapTypeId={mapType}
         gestureHandling="greedy"
         disableDefaultUI={false}
         internalUsageAttributionIds={['gmp_mcp_codeassist_v1_aistudio']}
       >
-        <MapBoundsController aoiBbox={aoiBbox} />
+        <MapBoundsController
+          aoiBbox={aoiBbox}
+          resetBoundsSignal={resetBoundsSignal}
+        />
+
+        {/* Center Marker at Geocoded Searched Location */}
+        {aoiBbox && (
+          <Marker
+            position={{ lat: centerLat, lng: centerLng }}
+            title="Geocoded Target Location"
+          />
+        )}
 
         {/* AOI Bounding Box Rectangle Overlay */}
         {aoiBbox && showAoiLayer && (
@@ -87,12 +112,12 @@ export const GoogleGeospatialMap: React.FC<GoogleGeospatialMapProps> = ({
             strokeOpacity={0.9}
             strokeWeight={2}
             fillColor="#0ea5e9"
-            fillOpacity={0.08}
+            fillOpacity={visualizationMode === 'change' ? 0.08 : 0.02}
           />
         )}
 
         {/* Multi-Temporal Change Detection Grid Polygons */}
-        {showChangeLayer &&
+        {shouldRenderPolygons &&
           analysisResult?.changeFeaturesGeoJson?.features?.map(
             (feat: any, idx: number) => {
               const props = feat.properties || {};

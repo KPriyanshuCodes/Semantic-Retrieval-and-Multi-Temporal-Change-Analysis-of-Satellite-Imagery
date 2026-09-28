@@ -14,6 +14,16 @@ export interface SemanticParsedQuery {
   method?: string;
 }
 
+export interface GeocodeCandidate {
+  place: string;
+  displayName: string;
+  lat: number;
+  lon: number;
+  bbox: [number, number, number, number];
+  type?: string;
+  importance?: number;
+}
+
 export interface GeocodeResult {
   found: boolean;
   place: string;
@@ -22,6 +32,8 @@ export interface GeocodeResult {
   lon: number;
   bbox: [number, number, number, number]; // [minLon, minLat, maxLon, maxLat]
   attribution: string;
+  candidates?: GeocodeCandidate[];
+  error?: string;
 }
 
 export interface SatelliteScene {
@@ -65,14 +77,22 @@ export interface AnalysisResult {
     date: string;
     cloudCover: number;
     satellite: string;
+    collection?: string;
+    source?: string;
+    bbox?: [number, number, number, number];
     thumbnailUrl?: string;
+    productUrl?: string;
   };
   afterScene: {
     id: string;
     date: string;
     cloudCover: number;
     satellite: string;
+    collection?: string;
+    source?: string;
+    bbox?: [number, number, number, number];
     thumbnailUrl?: string;
+    productUrl?: string;
   };
   aoi: [number, number, number, number];
   metrics: ChangeMetricBreakdown;

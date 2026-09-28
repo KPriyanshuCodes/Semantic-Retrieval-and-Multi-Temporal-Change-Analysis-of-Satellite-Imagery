@@ -27,6 +27,8 @@ export default function App() {
   const [afterScene, setAfterScene] = useState<SatelliteScene | null>(null);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisStep, setAnalysisStep] = useState(1);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [selectedGridCell, setSelectedGridCell] = useState<any | null>(null);
 
   // Privacy & Consent State
@@ -40,48 +42,69 @@ export default function App() {
     return () => window.removeEventListener('gmp-quota-exceeded', handler);
   }, []);
 
+  const [multiSearchResult, setMultiSearchResult] = useState<any | null>(null);
+  const [activeSourceFilter, setActiveSourceFilter] = useState<'all' | 'sentinel2' | 'landsat'>('all');
+
   // Handle Search Execution from SearchPanel
-  const handleSearchComplete = async (parsed: SemanticParsedQuery, geocode: GeocodeResult) => {
+  const handleSearchComplete = async (
+    parsed: SemanticParsedQuery,
+    geocode: GeocodeResult,
+    multiResult: any = multiSearchResult
+  ) => {
     setParsedQuery(parsed);
     setGeocodeData(geocode);
+    setAnalysisResult(null); // Clear previous analysis for new location
+    setSelectedGridCell(null);
     setIsSearching(true);
-    setSearchStatusMessage('Searching Copernicus Sentinel-2 L2A STAC catalog…');
+
+    setSearchStatusMessage(
+      `Querying Copernicus Sentinel-2 and Google Earth Engine Landsat in parallel for ${geocode.place || parsed.location}…`
+    );
 
     try {
-      const res = await fetch('/api/satellite/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          bbox: geocode.bbox,
-          startDate: parsed.startDate,
-          endDate: parsed.endDate,
-          maxCloudCover: parsed.maxCloudCover,
-          forceDemo: isDemoMode,
-        }),
-      });
-
-      if (!res.ok) {
-        throw new Error(`Satellite search error: HTTP ${res.status}`);
+      let data = multiResult;
+      if (!data && geocode) {
+        const multiRes = await fetch('/api/satellite/multi-search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            bbox: geocode.bbox,
+            startDate: parsed.startDate,
+            endDate: parsed.endDate,
+            maxCloudCover: parsed.maxCloudCover,
+            location: geocode.place,
+          }),
+        });
+        data = await multiRes.json();
       }
 
-      const json = await res.json();
-      const retrievedScenes: SatelliteScene[] = json.scenes || [];
-      setScenes(retrievedScenes);
-      setDataModeNotice(json.demoNotice || json.message);
+      setMultiSearchResult(data);
+      const s2Scenes = data?.sentinel2?.scenes || [];
+      const landsatScenes = data?.landsat?.scenes || [];
+      const allScenes = [...s2Scenes, ...landsatScenes];
 
-      // Auto-preselect sensible Before and After if at least 2 scenes exist
-      if (retrievedScenes.length >= 2) {
-        setBeforeScene(retrievedScenes[0]);
-        setAfterScene(retrievedScenes[retrievedScenes.length - 1]);
-      } else if (retrievedScenes.length === 1) {
-        setBeforeScene(retrievedScenes[0]);
+      setScenes(allScenes);
+      setActiveSourceFilter('all');
+
+      // Auto-preselect sensible Before and After
+      if (s2Scenes.length >= 2) {
+        setBeforeScene(s2Scenes[0]);
+        setAfterScene(s2Scenes[s2Scenes.length - 1]);
+      } else if (s2Scenes.length === 1) {
+        setBeforeScene(s2Scenes[0]);
+        setAfterScene(null);
+      } else if (landsatScenes.length >= 2) {
+        setBeforeScene(landsatScenes[0]);
+        setAfterScene(landsatScenes[landsatScenes.length - 1]);
+      } else if (landsatScenes.length === 1) {
+        setBeforeScene(landsatScenes[0]);
         setAfterScene(null);
       }
 
-      // Automatically transition to catalog / map view if user was on explore
+      setDataModeNotice('Parallel multi-source search complete. Review available satellite data below.');
       setActiveTab('catalog');
     } catch (err: any) {
-      console.error('Failed to retrieve satellite scenes:', err);
+      console.error('Multi-source search failed:', err);
     } finally {
       setIsSearching(false);
       setSearchStatusMessage('');
@@ -93,9 +116,15 @@ export default function App() {
     if (!beforeScene || !afterScene) return;
 
     setIsAnalyzing(true);
+    setAnalysisError(null);
+    setAnalysisStep(1);
     setActiveTab('analysis');
 
+    const t1 = setTimeout(() => setAnalysisStep(2), 250);
+    const t2 = setTimeout(() => setAnalysisStep(3), 500);
+
     try {
+      setAnalysisStep(4);
       const res = await fetch('/api/analysis', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -113,11 +142,16 @@ export default function App() {
         throw new Error(errorJson.error || 'Multi-temporal change analysis computation failed.');
       }
 
+      setAnalysisStep(5);
       const result: AnalysisResult = await res.json();
+      setAnalysisStep(6);
+      await new Promise((r) => setTimeout(r, 200));
       setAnalysisResult(result);
     } catch (err: any) {
-      alert(`Analysis Notice: ${err.message}`);
+      setAnalysisError(err.message || 'An error occurred during multi-temporal analysis.');
     } finally {
+      clearTimeout(t1);
+      clearTimeout(t2);
       setIsAnalyzing(false);
     }
   };
@@ -203,7 +237,11 @@ export default function App() {
               {/* Left Column: Scene List */}
               <div className="lg:col-span-7 space-y-4">
                 <SceneList
-                  scenes={scenes}
+                  scenes={scenes.filter((s) => {
+                    if (activeSourceFilter === 'sentinel2') return s.collection === 'sentinel-2-l2a';
+                    if (activeSourceFilter === 'landsat') return s.collection === 'landsat-c2-l2';
+                    return true;
+                  })}
                   beforeScene={beforeScene}
                   afterScene={afterScene}
                   onSelectBefore={setBeforeScene}
@@ -217,6 +255,54 @@ export default function App() {
                   isAnalyzing={isAnalyzing}
                   dataModeNotice={dataModeNotice}
                   isDemo={isDemoMode}
+                  locationName={geocodeData?.displayName || parsedQuery?.location || 'Selected Region'}
+                  multiSearchResult={multiSearchResult}
+                  activeSourceFilter={activeSourceFilter}
+                  setActiveSourceFilter={setActiveSourceFilter}
+                  onIncreaseDateRange={async () => {
+                    if (!parsedQuery || !geocodeData) return;
+                    const startYear = parseInt(parsedQuery.startDate.slice(0, 4), 10) - 2;
+                    const endYear = parseInt(parsedQuery.endDate.slice(0, 4), 10) + 1;
+                    const updated = {
+                      ...parsedQuery,
+                      startDate: `${startYear}-01-01`,
+                      endDate: `${endYear}-12-31`,
+                    };
+                    const multiRes = await fetch('/api/satellite/multi-search', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        bbox: geocodeData.bbox,
+                        startDate: updated.startDate,
+                        endDate: updated.endDate,
+                        maxCloudCover: updated.maxCloudCover,
+                        location: geocodeData.place,
+                      }),
+                    });
+                    const multiData = await multiRes.json();
+                    handleSearchComplete(updated, geocodeData, multiData);
+                  }}
+                  onIncreaseCloudLimit={async () => {
+                    if (!parsedQuery || !geocodeData) return;
+                    const updated = {
+                      ...parsedQuery,
+                      maxCloudCover: Math.min(60, parsedQuery.maxCloudCover + 20),
+                    };
+                    const multiRes = await fetch('/api/satellite/multi-search', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        bbox: geocodeData.bbox,
+                        startDate: updated.startDate,
+                        endDate: updated.endDate,
+                        maxCloudCover: updated.maxCloudCover,
+                        location: geocodeData.place,
+                      }),
+                    });
+                    const multiData = await multiRes.json();
+                    handleSearchComplete(updated, geocodeData, multiData);
+                  }}
+                  onChangeLocation={() => setActiveTab('explore')}
                 />
               </div>
 
@@ -224,8 +310,8 @@ export default function App() {
               <div className="lg:col-span-5 sticky top-20 space-y-3">
                 <div className="bg-white rounded-lg border border-slate-200 p-3 shadow-xs">
                   <div className="text-xs font-semibold text-slate-800 mb-2 flex items-center justify-between">
-                    <span>Geospatial Footprint & AOI</span>
-                    <span className="font-mono text-slate-400">Sentinel-2 L2A</span>
+                    <span>Target Area Map</span>
+                    <span className="text-[11px] text-slate-500">Selected Coverage</span>
                   </div>
                   <GeospatialMap
                     aoiBbox={geocodeData ? geocodeData.bbox : null}
@@ -241,41 +327,29 @@ export default function App() {
           </div>
         )}
 
-        {/* Tab 3: Change Analysis & Interactive Map */}
+        {/* Tab 3: Change Analysis Results */}
         {activeTab === 'analysis' && (
           <div className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-              {/* Left Column: Dual Layer Map */}
-              <div className="lg:col-span-7 space-y-4">
-                <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-xs">
-                  <div className="flex items-center justify-between mb-3 text-xs">
-                    <div className="font-bold text-slate-900">
-                      Multi-Temporal Observation Map
-                    </div>
-                    <div className="text-slate-500 font-mono text-[11px]">
-                      {beforeScene?.acquisitionDate || 'T1'} vs {afterScene?.acquisitionDate || 'T2'}
-                    </div>
-                  </div>
-                  <GeospatialMap
-                    aoiBbox={analysisResult ? analysisResult.aoi : geocodeData ? geocodeData.bbox : null}
-                    beforeScene={beforeScene}
-                    afterScene={afterScene}
-                    analysisResult={analysisResult}
-                    selectedGridCell={selectedGridCell}
-                    onSelectGridCell={setSelectedGridCell}
-                  />
-                </div>
-              </div>
-
-              {/* Right Column: Quantitative Dashboard */}
-              <div className="lg:col-span-5 space-y-4">
-                <AnalysisDashboard
-                  analysis={analysisResult}
+            <AnalysisDashboard
+              analysis={analysisResult}
+              selectedGridCell={selectedGridCell}
+              onClearCell={() => setSelectedGridCell(null)}
+              onBackToCatalog={() => setActiveTab('catalog')}
+              onRetryAnalysis={handleRunAnalysis}
+              isAnalyzing={isAnalyzing}
+              analysisStep={analysisStep}
+              analysisError={analysisError}
+              mapComponent={
+                <GeospatialMap
+                  aoiBbox={analysisResult ? analysisResult.aoi : geocodeData ? geocodeData.bbox : null}
+                  beforeScene={beforeScene}
+                  afterScene={afterScene}
+                  analysisResult={analysisResult}
                   selectedGridCell={selectedGridCell}
-                  onClearCell={() => setSelectedGridCell(null)}
+                  onSelectGridCell={setSelectedGridCell}
                 />
-              </div>
-            </div>
+              }
+            />
           </div>
         )}
 

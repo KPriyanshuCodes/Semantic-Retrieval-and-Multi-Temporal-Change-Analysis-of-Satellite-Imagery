@@ -1,18 +1,34 @@
 import React, { useState } from 'react';
-import { Search, MapPin, Calendar, Cloud, Compass, ArrowRight, AlertCircle, Sparkles, Sliders } from 'lucide-react';
-import { SemanticParsedQuery, GeocodeResult, AnalysisType } from '../types';
+import {
+  Search,
+  MapPin,
+  Calendar,
+  Cloud,
+  Compass,
+  ArrowRight,
+  AlertCircle,
+  HelpCircle,
+  ChevronDown,
+  ChevronUp,
+} from 'lucide-react';
+import { SemanticParsedQuery, GeocodeResult, GeocodeCandidate, AnalysisType } from '../types';
 
 interface SearchPanelProps {
-  onSearchComplete: (parsed: SemanticParsedQuery, geocode: GeocodeResult) => void;
+  onSearchComplete: (
+    parsed: SemanticParsedQuery,
+    geocode: GeocodeResult,
+    multiResult: any
+  ) => void;
   isSearching: boolean;
   searchStatusMessage: string;
 }
 
 const SAMPLE_QUERIES = [
-  'Show urban expansion near Delhi between 2020 and 2025',
-  'Find vegetation loss around Mumbai between 2019 and 2024',
-  'Show changes in water bodies near Bengaluru',
-  'Compare this area before and after 2023 with low cloud cover',
+  'Show forest changes in Bhopal between 2020 and 2026',
+  'Show urban expansion in Mumbai from 2020 to 2025',
+  'Show vegetation changes around Bengaluru between 2019 and 2024',
+  'Analyze Delhi urban growth from 2020 to 2026',
+  'Show water-body changes near Hyderabad',
 ];
 
 export const SearchPanel: React.FC<SearchPanelProps> = ({
@@ -20,18 +36,22 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
   isSearching,
   searchStatusMessage,
 }) => {
-  const [queryText, setQueryText] = useState('Show urban expansion near Delhi between 2020 and 2025');
+  const [queryText, setQueryText] = useState('Show forest changes in Bhopal between 2020 and 2026');
   const [parsedData, setParsedData] = useState<SemanticParsedQuery | null>(null);
   const [geocodeData, setGeocodeData] = useState<GeocodeResult | null>(null);
+  const [selectedCandidate, setSelectedCandidate] = useState<GeocodeCandidate | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [showOverrides, setShowOverrides] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
 
-  // Editable parameters for user override
-  const [overrideLocation, setOverrideLocation] = useState('Delhi');
+  // Missing location prompt state
+  const [manualLocationInput, setManualLocationInput] = useState('');
+  const [awaitingLocationInput, setAwaitingLocationInput] = useState(false);
+
+  // Quick editable parameters
+  const [showAdjustments, setShowAdjustments] = useState(false);
   const [overrideStartDate, setOverrideStartDate] = useState('2020-01-01');
-  const [overrideEndDate, setOverrideEndDate] = useState('2025-12-31');
-  const [overrideType, setOverrideType] = useState<AnalysisType>('urban');
-  const [overrideCloud, setOverrideCloud] = useState(20);
+  const [overrideEndDate, setOverrideEndDate] = useState('2026-12-31');
+  const [overrideType, setOverrideType] = useState<AnalysisType>('vegetation');
 
   const handleRunSearch = async (e?: React.FormEvent, customQuery?: string) => {
     if (e) e.preventDefault();
@@ -39,9 +59,11 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
     if (!query.trim()) return;
 
     setErrorMessage(null);
+    setAwaitingLocationInput(false);
+    setSelectedCandidate(null);
 
     try {
-      // 1. Semantic query intent parsing
+      // 1. Natural Language Intent Parsing
       const parseRes = await fetch('/api/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -49,25 +71,39 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
       });
 
       if (!parseRes.ok) {
-        throw new Error('Failed to interpret natural language query.');
+        throw new Error('Failed to process search query.');
       }
 
       const parseJson = await parseRes.json();
       const parsed: SemanticParsedQuery = parseJson.parsed;
       setParsedData(parsed);
 
-      // Sync overrides with parsed parameters
-      setOverrideLocation(parsed.location);
       setOverrideStartDate(parsed.startDate);
       setOverrideEndDate(parsed.endDate);
       setOverrideType(parsed.analysisType);
-      setOverrideCloud(parsed.maxCloudCover);
 
-      // 2. Geocoding location to real bounding box
+      // 2. Validate location existence from query
+      if (!parsed.location || !parsed.location.trim()) {
+        setAwaitingLocationInput(true);
+        setErrorMessage('Please specify the city or region you want to analyze.');
+        return;
+      }
+
+      // 3. Geocoding
+      await executeGeocode(parsed.location, parsed);
+    } catch (err: any) {
+      setErrorMessage(
+        err.message || 'Error searching satellite data. Please verify your query or location.'
+      );
+    }
+  };
+
+  const executeGeocode = async (locationStr: string, currentParsed: SemanticParsedQuery) => {
+    try {
       const geoRes = await fetch('/api/geocode', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ place: parsed.location }),
+        body: JSON.stringify({ place: locationStr }),
       });
 
       if (!geoRes.ok) {
@@ -75,60 +111,116 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
       }
 
       const geoJson: GeocodeResult = await geoRes.json();
-      setGeocodeData(geoJson);
+      if (!geoJson.found) {
+        setAwaitingLocationInput(true);
+        setErrorMessage(
+          geoJson.error || `Could not find coordinates for "${locationStr}". Please check spelling.`
+        );
+        return;
+      }
 
-      // Notify parent to fetch satellite scenes
-      onSearchComplete(parsed, geoJson);
+      setGeocodeData(geoJson);
+      if (geoJson.candidates && geoJson.candidates.length > 0) {
+        setSelectedCandidate(geoJson.candidates[0]);
+      }
+
+      // Automatically search both Sentinel-2 and Landsat in parallel
+      const multiRes = await fetch('/api/satellite/multi-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bbox: geoJson.bbox,
+          startDate: currentParsed.startDate,
+          endDate: currentParsed.endDate,
+          maxCloudCover: currentParsed.maxCloudCover,
+          location: geoJson.place,
+        }),
+      });
+      const multiData = await multiRes.json();
+
+      onSearchComplete(currentParsed, geoJson, multiData);
     } catch (err: any) {
-      setErrorMessage(
-        err.message || 'Error processing search. Please check your query or specify location directly.'
-      );
+      setErrorMessage(err.message || 'Failed to search satellite catalogs.');
     }
   };
 
-  const handleApplyOverrides = async () => {
-    if (!overrideLocation.trim()) return;
-    setErrorMessage(null);
+  const handleSelectCandidate = async (candidate: GeocodeCandidate) => {
+    setSelectedCandidate(candidate);
+    const updatedGeocode: GeocodeResult = {
+      found: true,
+      place: candidate.place,
+      displayName: candidate.displayName,
+      lat: candidate.lat,
+      lon: candidate.lon,
+      bbox: candidate.bbox,
+      attribution: geocodeData?.attribution || 'OpenStreetMap',
+      candidates: geocodeData?.candidates,
+    };
+    setGeocodeData(updatedGeocode);
 
-    try {
-      const geoRes = await fetch('/api/geocode', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ place: overrideLocation }),
-      });
-      const geoJson: GeocodeResult = await geoRes.json();
-      setGeocodeData(geoJson);
-
+    if (parsedData) {
       const updatedParsed: SemanticParsedQuery = {
-        location: overrideLocation,
-        startDate: overrideStartDate,
-        endDate: overrideEndDate,
-        analysisType: overrideType,
-        maxCloudCover: overrideCloud,
-        satellite: 'Sentinel-2',
-        collection: 'sentinel-2-l2a',
-        confidence: 1.0,
-        method: 'User Configured Overrides',
+        ...parsedData,
+        location: candidate.place,
       };
-
       setParsedData(updatedParsed);
-      onSearchComplete(updatedParsed, geoJson);
-    } catch (err: any) {
-      setErrorMessage('Failed to geocode overridden location.');
+      await executeGeocode(candidate.place, updatedParsed);
     }
+  };
+
+  const handleManualLocationSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualLocationInput.trim()) return;
+
+    setErrorMessage(null);
+    setAwaitingLocationInput(false);
+
+    const baseParsed: SemanticParsedQuery = parsedData || {
+      location: manualLocationInput.trim(),
+      startDate: '2020-01-01',
+      endDate: '2026-12-31',
+      analysisType: 'vegetation',
+      maxCloudCover: 20,
+      satellite: 'Sentinel-2',
+      collection: 'sentinel-2-l2a',
+      confidence: 1.0,
+      needsClarification: false,
+    };
+
+    const updatedParsed: SemanticParsedQuery = {
+      ...baseParsed,
+      location: manualLocationInput.trim(),
+      needsClarification: false,
+    };
+
+    setParsedData(updatedParsed);
+    await executeGeocode(manualLocationInput.trim(), updatedParsed);
+  };
+
+  const handleApplyAdjustments = async () => {
+    if (!parsedData || !geocodeData) return;
+    const updated: SemanticParsedQuery = {
+      ...parsedData,
+      startDate: overrideStartDate,
+      endDate: overrideEndDate,
+      analysisType: overrideType,
+    };
+    setParsedData(updated);
+    await executeGeocode(geocodeData.place, updated);
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Primary Query Card */}
       <div className="bg-white rounded-lg border border-slate-200 p-6 shadow-xs">
         <div className="max-w-3xl">
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 mb-2">
-            Semantic Satellite Query & Retrieval
+          <h1 className="text-xl font-bold tracking-tight text-slate-900 mb-1">
+            Search Satellite Imagery
           </h1>
-          <p className="text-sm text-slate-600 mb-6">
-            Enter a natural language request. The system extracts geospatial boundaries, temporal intervals,
-            and Earth observation themes, then queries the official Copernicus Sentinel-2 L2A STAC archive.
+          <p className="text-xs text-slate-600 mb-4">
+            Enter what you want to analyze. The system automatically searches both{' '}
+            <strong className="text-slate-800">Copernicus (Sentinel-2)</strong> and{' '}
+            <strong className="text-slate-800">Google Earth Engine (Landsat)</strong> to find clear observation dates.
           </p>
 
           <form onSubmit={handleRunSearch} className="space-y-3">
@@ -137,24 +229,26 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
                 type="text"
                 value={queryText}
                 onChange={(e) => setQueryText(e.target.value)}
-                placeholder="e.g. Show urban expansion near Delhi between 2020 and 2025"
-                className="w-full pl-11 pr-28 py-3 text-sm rounded border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent text-slate-900 placeholder:text-slate-400"
+                placeholder="e.g. Show forest changes in Bhopal between 2020 and 2026"
+                className="w-full pl-10 pr-32 py-3 text-sm rounded-md border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent text-slate-900 placeholder:text-slate-400"
                 disabled={isSearching}
+                aria-label="Natural language satellite search query"
               />
-              <Search className="w-5 h-5 text-slate-400 absolute left-3.5 pointer-events-none" />
+              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none" />
               <button
                 type="submit"
                 disabled={isSearching || !queryText.trim()}
-                className="absolute right-2 px-4 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 disabled:bg-slate-400 rounded transition-colors flex items-center gap-1.5"
+                className="absolute right-1.5 px-4 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 disabled:bg-slate-400 rounded transition-colors flex items-center gap-1.5"
+                aria-label="Search satellite data"
               >
-                <span>{isSearching ? 'Processing…' : 'Search STAC'}</span>
+                <span>{isSearching ? 'Searching…' : 'Search Data'}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
 
             {/* Quick Sample Queries */}
-            <div className="flex flex-wrap items-center gap-1.5 pt-1">
-              <span className="text-xs text-slate-600 font-medium mr-1">Quick examples:</span>
+            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+              <span className="text-[11px] text-slate-500 font-medium mr-1">Examples:</span>
               {SAMPLE_QUERIES.map((sample, idx) => (
                 <button
                   key={idx}
@@ -163,7 +257,7 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
                     setQueryText(sample);
                     handleRunSearch(undefined, sample);
                   }}
-                  className="text-xs px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded transition-colors text-left"
+                  className="text-[11px] px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded transition-colors text-left"
                 >
                   {sample}
                 </button>
@@ -171,165 +265,191 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
             </div>
           </form>
 
-          {/* Status / Loading Banner */}
+          {/* Status Banner */}
           {isSearching && (
-            <div className="mt-4 p-3 bg-cyan-50 border border-cyan-200 rounded text-xs text-cyan-900 flex items-center gap-2">
-              <div className="w-3.5 h-3.5 border-2 border-cyan-700 border-t-transparent rounded-full animate-spin shrink-0" />
-              <span>{searchStatusMessage || 'Searching satellite catalog…'}</span>
+            <div className="mt-4 p-3 bg-slate-100 border border-slate-200 rounded text-xs text-slate-800 flex items-center gap-2">
+              <div className="w-3.5 h-3.5 border-2 border-slate-700 border-t-transparent rounded-full animate-spin shrink-0" />
+              <span>{searchStatusMessage || 'Searching satellite data catalogs...'}</span>
             </div>
           )}
 
           {/* Error Message */}
           {errorMessage && (
-            <div className="mt-4 p-3 bg-rose-50 border border-rose-200 rounded text-xs text-rose-800 flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+            <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded text-xs text-red-800 flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
               <span>{errorMessage}</span>
+            </div>
+          )}
+
+          {/* Explicit Location Input if Missing in Query */}
+          {awaitingLocationInput && (
+            <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg space-y-2">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900">
+                <HelpCircle className="w-4 h-4 text-amber-700" />
+                <span>Specify Location</span>
+              </div>
+              <p className="text-xs text-amber-800">
+                Please enter the target city or region to search satellite images:
+              </p>
+              <form onSubmit={handleManualLocationSubmit} className="flex gap-2">
+                <input
+                  type="text"
+                  value={manualLocationInput}
+                  onChange={(e) => setManualLocationInput(e.target.value)}
+                  placeholder="e.g. Bhopal, Mumbai, Bengaluru"
+                  className="flex-1 text-xs p-2 rounded border border-amber-300 bg-white text-slate-900 focus:outline-none"
+                />
+                <button
+                  type="submit"
+                  disabled={!manualLocationInput.trim()}
+                  className="px-4 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded transition-colors"
+                >
+                  Search
+                </button>
+              </form>
             </div>
           )}
         </div>
       </div>
 
-      {/* Extracted Parameters & Geocoding Details */}
-      {parsedData && (
-        <div className="bg-white rounded-lg border border-slate-200 p-6 shadow-xs space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+      {/* Interpreted Request & Location Confirmation */}
+      {parsedData && geocodeData && geocodeData.found && (
+        <div className="bg-white rounded-lg border border-slate-200 p-5 shadow-xs space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-900">
+              Interpreted Request
+            </h2>
             <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-cyan-600" />
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-800">
-                Extracted Query Parameters
-              </h2>
-              <span className="text-xs text-slate-600 font-mono">
-                ({parsedData.method || 'Geospatial NLP Parser'})
-              </span>
+              <button
+                type="button"
+                onClick={() => setShowAdjustments(!showAdjustments)}
+                className="text-xs font-semibold text-slate-600 hover:text-slate-900"
+              >
+                {showAdjustments ? 'Hide Adjustments' : 'Adjust Dates/Type'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowDetails(!showDetails)}
+                className="text-xs font-semibold text-slate-500 hover:text-slate-800 flex items-center gap-0.5"
+              >
+                <span>Details</span>
+                {showDetails ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              </button>
             </div>
-            <button
-              onClick={() => setShowOverrides(!showOverrides)}
-              className="text-xs text-slate-600 hover:text-slate-900 flex items-center gap-1 font-medium"
-            >
-              <Sliders className="w-3.5 h-3.5" />
-              <span>{showOverrides ? 'Hide Overrides' : 'Adjust Parameters'}</span>
-            </button>
           </div>
 
-          {/* Parameter Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          {/* Clean Key Request Fields */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="p-3 bg-slate-50 rounded border border-slate-100">
-              <div className="text-xs text-slate-600 flex items-center gap-1 mb-1">
-                <MapPin className="w-3.5 h-3.5 text-slate-500" />
-                <span>Geographic Target</span>
+              <div className="text-[11px] text-slate-500 flex items-center gap-1 mb-0.5">
+                <MapPin className="w-3 h-3 text-slate-400" />
+                <span>Location</span>
               </div>
-              <div className="text-sm font-semibold text-slate-900">{parsedData.location}</div>
-            </div>
-
-            <div className="p-3 bg-slate-50 rounded border border-slate-100">
-              <div className="text-xs text-slate-600 flex items-center gap-1 mb-1">
-                <Calendar className="w-3.5 h-3.5 text-slate-500" />
-                <span>Start Baseline</span>
-              </div>
-              <div className="text-sm font-semibold font-mono text-slate-900">{parsedData.startDate}</div>
-            </div>
-
-            <div className="p-3 bg-slate-50 rounded border border-slate-100">
-              <div className="text-xs text-slate-600 flex items-center gap-1 mb-1">
-                <Calendar className="w-3.5 h-3.5 text-slate-500" />
-                <span>End Observation</span>
-              </div>
-              <div className="text-sm font-semibold font-mono text-slate-900">{parsedData.endDate}</div>
-            </div>
-
-            <div className="p-3 bg-slate-50 rounded border border-slate-100">
-              <div className="text-xs text-slate-600 flex items-center gap-1 mb-1">
-                <Compass className="w-3.5 h-3.5 text-slate-500" />
-                <span>Analysis Theme</span>
-              </div>
-              <div className="text-sm font-semibold text-slate-900 capitalize">
-                {parsedData.analysisType} Change
+              <div className="text-xs font-bold text-slate-900 truncate" title={geocodeData.displayName}>
+                {geocodeData.place || parsedData.location}
               </div>
             </div>
 
             <div className="p-3 bg-slate-50 rounded border border-slate-100">
-              <div className="text-xs text-slate-600 flex items-center gap-1 mb-1">
-                <Cloud className="w-3.5 h-3.5 text-slate-500" />
-                <span>Max Cloud Cover</span>
+              <div className="text-[11px] text-slate-500 flex items-center gap-1 mb-0.5">
+                <Calendar className="w-3 h-3 text-slate-400" />
+                <span>Period</span>
               </div>
-              <div className="text-sm font-semibold font-mono text-slate-900">
-                ≤ {parsedData.maxCloudCover}%
+              <div className="text-xs font-bold text-slate-900">
+                {parsedData.startDate.slice(0, 4)} – {parsedData.endDate.slice(0, 4)}
+              </div>
+            </div>
+
+            <div className="p-3 bg-slate-50 rounded border border-slate-100">
+              <div className="text-[11px] text-slate-500 flex items-center gap-1 mb-0.5">
+                <Compass className="w-3 h-3 text-slate-400" />
+                <span>Change Category</span>
+              </div>
+              <div className="text-xs font-bold text-slate-900 capitalize">
+                {parsedData.analysisType === 'vegetation'
+                  ? 'Vegetation / Forest'
+                  : parsedData.analysisType === 'urban'
+                  ? 'Urban / Construction'
+                  : parsedData.analysisType === 'water'
+                  ? 'Water Bodies'
+                  : 'General Land Change'}
               </div>
             </div>
           </div>
 
-          {/* Geocoding Attribution & BBox Information */}
-          {geocodeData && (
-            <div className="text-xs text-slate-600 pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-t border-slate-100">
+          {/* Quick Adjustments */}
+          {showAdjustments && (
+            <div className="mt-3 pt-3 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50/70 p-3 rounded">
               <div>
-                <span className="font-medium text-slate-700">AOI Coordinates (WGS84):</span>{' '}
-                <span className="font-mono">
-                  [{geocodeData.bbox.map((v) => v.toFixed(3)).join(', ')}]
-                </span>
-                <span className="ml-2">· Center: {geocodeData.lat.toFixed(4)}°N, {geocodeData.lon.toFixed(4)}°E</span>
-              </div>
-              <div className="text-slate-600 text-[11px]">
-                Geocoded via OpenStreetMap Nominatim
-              </div>
-            </div>
-          )}
-
-          {/* Manual Overrides Accordion */}
-          {showOverrides && (
-            <div className="mt-4 pt-4 border-t border-slate-200 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 bg-slate-50/80 p-4 rounded">
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Location</label>
-                <input
-                  type="text"
-                  value={overrideLocation}
-                  onChange={(e) => setOverrideLocation(e.target.value)}
-                  className="w-full text-xs p-2 rounded border border-slate-300 bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Start Date</label>
+                <label className="block text-[11px] font-medium text-slate-600 mb-1">Start Date</label>
                 <input
                   type="date"
                   value={overrideStartDate}
                   onChange={(e) => setOverrideStartDate(e.target.value)}
-                  className="w-full text-xs p-2 rounded border border-slate-300 bg-white"
+                  className="w-full text-xs p-1.5 rounded border border-slate-300 bg-white"
                 />
               </div>
-
               <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">End Date</label>
+                <label className="block text-[11px] font-medium text-slate-600 mb-1">End Date</label>
                 <input
                   type="date"
                   value={overrideEndDate}
                   onChange={(e) => setOverrideEndDate(e.target.value)}
-                  className="w-full text-xs p-2 rounded border border-slate-300 bg-white"
+                  className="w-full text-xs p-1.5 rounded border border-slate-300 bg-white"
                 />
               </div>
-
               <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Analysis Type</label>
-                <select
-                  value={overrideType}
-                  onChange={(e) => setOverrideType(e.target.value as AnalysisType)}
-                  className="w-full text-xs p-2 rounded border border-slate-300 bg-white"
-                >
-                  <option value="urban">Urban / Built-up (NDBI)</option>
-                  <option value="vegetation">Vegetation (NDVI)</option>
-                  <option value="water">Water Bodies (NDWI)</option>
-                  <option value="general">General (Change Vector)</option>
-                </select>
+                <label className="block text-[11px] font-medium text-slate-600 mb-1">Change Type</label>
+                <div className="flex gap-2">
+                  <select
+                    value={overrideType}
+                    onChange={(e) => setOverrideType(e.target.value as AnalysisType)}
+                    className="flex-1 text-xs p-1.5 rounded border border-slate-300 bg-white"
+                  >
+                    <option value="vegetation">Vegetation / Forest</option>
+                    <option value="urban">Urban / Construction</option>
+                    <option value="water">Water Bodies</option>
+                    <option value="general">General Change</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={handleApplyAdjustments}
+                    className="px-3 py-1.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded transition-colors"
+                  >
+                    Update
+                  </button>
+                </div>
               </div>
+            </div>
+          )}
 
-              <div className="flex items-end">
-                <button
-                  type="button"
-                  onClick={handleApplyOverrides}
-                  className="w-full py-2 px-3 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded transition-colors"
-                >
-                  Apply & Re-query
-                </button>
+          {/* Optional Details Section (Coordinates & Ambiguity Candidates) */}
+          {showDetails && (
+            <div className="mt-2 pt-2 border-t border-slate-100 text-xs text-slate-500 space-y-2">
+              <div>
+                <strong>Matched Area:</strong> {geocodeData.displayName}
               </div>
+              {geocodeData.candidates && geocodeData.candidates.length > 1 && (
+                <div className="space-y-1">
+                  <span className="font-semibold text-slate-700">Matched locations:</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {geocodeData.candidates.map((cand, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => handleSelectCandidate(cand)}
+                        className={`text-xs px-2 py-1 rounded border transition-colors ${
+                          selectedCandidate?.displayName === cand.displayName
+                            ? 'bg-slate-900 text-white font-semibold'
+                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        }`}
+                      >
+                        {cand.place} ({cand.displayName.split(',')[1]?.trim() || 'Region'})
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
