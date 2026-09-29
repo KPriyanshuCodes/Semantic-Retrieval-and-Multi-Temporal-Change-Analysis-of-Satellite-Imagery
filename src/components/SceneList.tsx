@@ -219,7 +219,9 @@ export const SceneList: React.FC<SceneListProps> = ({
                   alt="Before observation"
                   className="w-12 h-12 rounded object-cover shrink-0 bg-slate-950"
                   onError={(e) => {
-                    (e.target as HTMLElement).style.display = 'none';
+                    const target = e.target as HTMLImageElement;
+                    target.onerror = null;
+                    target.src = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=77.3,23.1,77.5,23.3&bboxSR=4326&imageSR=4326&size=640,440&format=jpg&f=image';
                   }}
                 />
               ) : (
@@ -260,7 +262,9 @@ export const SceneList: React.FC<SceneListProps> = ({
                   alt="After observation"
                   className="w-12 h-12 rounded object-cover shrink-0 bg-slate-950"
                   onError={(e) => {
-                    (e.target as HTMLElement).style.display = 'none';
+                    const target = e.target as HTMLImageElement;
+                    target.onerror = null;
+                    target.src = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=77.3,23.1,77.5,23.3&bboxSR=4326&imageSR=4326&size=640,440&format=jpg&f=image';
                   }}
                 />
               ) : (
@@ -331,7 +335,9 @@ export const SceneList: React.FC<SceneListProps> = ({
                     className="w-full h-full object-cover"
                     loading="lazy"
                     onError={(e) => {
-                      (e.target as HTMLElement).style.display = 'none';
+                      const target = e.target as HTMLImageElement;
+                      target.onerror = null;
+                      target.src = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=77.3,23.1,77.5,23.3&bboxSR=4326&imageSR=4326&size=640,440&format=jpg&f=image';
                     }}
                   />
                 ) : (

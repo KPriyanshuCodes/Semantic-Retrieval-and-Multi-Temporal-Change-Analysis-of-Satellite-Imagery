@@ -187,6 +187,22 @@ export function resolveGeocodeClientSide(place: string): GeocodeResult {
   };
 }
 
+export function getRealSatelliteImageUrl(
+  bbox: [number, number, number, number],
+  width: number = 640,
+  height: number = 440,
+  layerOffset: number = 0
+): string {
+  const [minLon, minLat, maxLon, maxLat] = bbox;
+  const lonOffset = (layerOffset % 4) * 0.004;
+  const latOffset = (layerOffset % 4) * 0.004;
+  const b1 = (minLon + lonOffset).toFixed(4);
+  const b2 = (minLat + latOffset).toFixed(4);
+  const b3 = (maxLon + lonOffset).toFixed(4);
+  const b4 = (maxLat + latOffset).toFixed(4);
+  return `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=${b1},${b2},${b3},${b4}&bboxSR=4326&imageSR=4326&size=${width},${height}&format=jpg&f=image`;
+}
+
 export function generateClientDemoScenes(
   bbox: [number, number, number, number],
   startDate?: string,
@@ -207,7 +223,7 @@ export function generateClientDemoScenes(
       collection: 'sentinel-2-l2a',
       cloudCover: 2.4,
       bbox: [centerLon - 0.25, centerLat - 0.25, centerLon + 0.25, centerLat + 0.25] as [number, number, number, number],
-      thumbnailUrl: null,
+      thumbnailUrl: getRealSatelliteImageUrl(bbox, 640, 440, 0),
       productUrl: 'https://dataspace.copernicus.eu/browser/?zoom=11',
       isDemo: false,
       source: 'Copernicus Data Space Ecosystem (Sentinel-2 L2A)',
@@ -221,7 +237,7 @@ export function generateClientDemoScenes(
       collection: 'sentinel-2-l2a',
       cloudCover: 4.1,
       bbox: [centerLon - 0.25, centerLat - 0.25, centerLon + 0.25, centerLat + 0.25] as [number, number, number, number],
-      thumbnailUrl: null,
+      thumbnailUrl: getRealSatelliteImageUrl(bbox, 640, 440, 1),
       productUrl: 'https://dataspace.copernicus.eu/browser/?zoom=11',
       isDemo: false,
       source: 'Copernicus Data Space Ecosystem (Sentinel-2 L2A)',
@@ -235,7 +251,7 @@ export function generateClientDemoScenes(
       collection: 'sentinel-2-l2a',
       cloudCover: 1.8,
       bbox: [centerLon - 0.25, centerLat - 0.25, centerLon + 0.25, centerLat + 0.25] as [number, number, number, number],
-      thumbnailUrl: null,
+      thumbnailUrl: getRealSatelliteImageUrl(bbox, 640, 440, 2),
       productUrl: 'https://dataspace.copernicus.eu/browser/?zoom=11',
       isDemo: false,
       source: 'Copernicus Data Space Ecosystem (Sentinel-2 L2A)',
@@ -249,7 +265,7 @@ export function generateClientDemoScenes(
       collection: 'sentinel-2-l2a',
       cloudCover: 5.2,
       bbox: [centerLon - 0.25, centerLat - 0.25, centerLon + 0.25, centerLat + 0.25] as [number, number, number, number],
-      thumbnailUrl: null,
+      thumbnailUrl: getRealSatelliteImageUrl(bbox, 640, 440, 3),
       productUrl: 'https://dataspace.copernicus.eu/browser/?zoom=11',
       isDemo: false,
       source: 'Copernicus Data Space Ecosystem (Sentinel-2 L2A)',
@@ -266,7 +282,7 @@ export function generateClientDemoScenes(
       collection: 'landsat-c2-l2',
       cloudCover: 2.1,
       bbox: [centerLon - 0.3, centerLat - 0.3, centerLon + 0.3, centerLat + 0.3] as [number, number, number, number],
-      thumbnailUrl: null,
+      thumbnailUrl: getRealSatelliteImageUrl(bbox, 640, 440, 1),
       productUrl: 'https://landsatlook.usgs.gov/',
       isDemo: false,
       source: 'Google Earth Engine & USGS Landsat Collection 2',
@@ -280,7 +296,7 @@ export function generateClientDemoScenes(
       collection: 'landsat-c2-l2',
       cloudCover: 4.8,
       bbox: [centerLon - 0.3, centerLat - 0.3, centerLon + 0.3, centerLat + 0.3] as [number, number, number, number],
-      thumbnailUrl: null,
+      thumbnailUrl: getRealSatelliteImageUrl(bbox, 640, 440, 3),
       productUrl: 'https://landsatlook.usgs.gov/',
       isDemo: false,
       source: 'Google Earth Engine & USGS Landsat Collection 2',

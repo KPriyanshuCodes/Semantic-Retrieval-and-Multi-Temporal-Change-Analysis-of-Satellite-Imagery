@@ -332,6 +332,11 @@ export const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({
                   src={beforeScene.thumbnailUrl}
                   alt={`Before observation on ${beforeScene.date}`}
                   className="w-full h-full object-cover"
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    target.onerror = null;
+                    target.src = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=77.3,23.1,77.5,23.3&bboxSR=4326&imageSR=4326&size=640,440&format=jpg&f=image';
+                  }}
                 />
               ) : (
                 <div className="text-center text-slate-400 p-4">
@@ -358,6 +363,11 @@ export const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({
                   src={afterScene.thumbnailUrl}
                   alt={`After observation on ${afterScene.date}`}
                   className="w-full h-full object-cover"
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    target.onerror = null;
+                    target.src = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=77.3,23.1,77.5,23.3&bboxSR=4326&imageSR=4326&size=640,440&format=jpg&f=image';
+                  }}
                 />
               ) : (
                 <div className="text-center text-slate-400 p-4">

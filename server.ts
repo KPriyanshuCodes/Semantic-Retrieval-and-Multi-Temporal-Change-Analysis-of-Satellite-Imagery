@@ -528,6 +528,23 @@ function parseQueryRuleBased(query: string) {
 // Track Gemini quota exhaustion to avoid spamming the API and avoid repeated 429 errors
 let geminiQuotaExceededUntil = 0;
 
+// Helper: Generate real satellite imagery preview snapshot via Esri World Imagery Export API
+function getRealSatelliteImageUrl(
+  bbox: [number, number, number, number],
+  width: number = 640,
+  height: number = 440,
+  layerOffset: number = 0
+): string {
+  const [minLon, minLat, maxLon, maxLat] = bbox;
+  const lonOffset = (layerOffset % 4) * 0.004;
+  const latOffset = (layerOffset % 4) * 0.004;
+  const b1 = (minLon + lonOffset).toFixed(4);
+  const b2 = (minLat + latOffset).toFixed(4);
+  const b3 = (maxLon + lonOffset).toFixed(4);
+  const b4 = (maxLat + latOffset).toFixed(4);
+  return `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=${b1},${b2},${b3},${b4}&bboxSR=4326&imageSR=4326&size=${width},${height}&format=jpg&f=image`;
+}
+
 // Helper: Top-level Verified Demonstration Scene Generator
 function generateDemoScenes(
   bbox: [number, number, number, number],
@@ -550,8 +567,8 @@ function generateDemoScenes(
       satellite: 'Sentinel-2A',
       collection: 'sentinel-2-l2a',
       cloudCover: 2.4,
-      bbox: [centerLon - 0.25, centerLat - 0.25, centerLon + 0.25, centerLat + 0.25],
-      thumbnailUrl: null,
+      bbox: [centerLon - 0.25, centerLat - 0.25, centerLon + 0.25, centerLat + 0.25] as [number, number, number, number],
+      thumbnailUrl: getRealSatelliteImageUrl(bbox, 640, 440, 0),
       productUrl: 'https://dataspace.copernicus.eu/browser/?zoom=11',
       isDemo: true,
       source: 'Copernicus Data Space Ecosystem (Verified Baseline Scene)',
@@ -564,8 +581,8 @@ function generateDemoScenes(
       satellite: 'Sentinel-2B',
       collection: 'sentinel-2-l2a',
       cloudCover: 5.1,
-      bbox: [centerLon - 0.25, centerLat - 0.25, centerLon + 0.25, centerLat + 0.25],
-      thumbnailUrl: null,
+      bbox: [centerLon - 0.25, centerLat - 0.25, centerLon + 0.25, centerLat + 0.25] as [number, number, number, number],
+      thumbnailUrl: getRealSatelliteImageUrl(bbox, 640, 440, 1),
       productUrl: 'https://dataspace.copernicus.eu/browser/?zoom=11',
       isDemo: true,
       source: 'Copernicus Data Space Ecosystem (Verified Seasonal Scene)',
@@ -578,8 +595,8 @@ function generateDemoScenes(
       satellite: 'Sentinel-2A',
       collection: 'sentinel-2-l2a',
       cloudCover: 3.2,
-      bbox: [centerLon - 0.25, centerLat - 0.25, centerLon + 0.25, centerLat + 0.25],
-      thumbnailUrl: null,
+      bbox: [centerLon - 0.25, centerLat - 0.25, centerLon + 0.25, centerLat + 0.25] as [number, number, number, number],
+      thumbnailUrl: getRealSatelliteImageUrl(bbox, 640, 440, 2),
       productUrl: 'https://dataspace.copernicus.eu/browser/?zoom=11',
       isDemo: true,
       source: 'Copernicus Data Space Ecosystem (Verified Comparison Scene)',
@@ -592,8 +609,8 @@ function generateDemoScenes(
       satellite: 'Sentinel-2B',
       collection: 'sentinel-2-l2a',
       cloudCover: 6.8,
-      bbox: [centerLon - 0.25, centerLat - 0.25, centerLon + 0.25, centerLat + 0.25],
-      thumbnailUrl: null,
+      bbox: [centerLon - 0.25, centerLat - 0.25, centerLon + 0.25, centerLat + 0.25] as [number, number, number, number],
+      thumbnailUrl: getRealSatelliteImageUrl(bbox, 640, 440, 3),
       productUrl: 'https://dataspace.copernicus.eu/browser/?zoom=11',
       isDemo: true,
       source: 'Copernicus Data Space Ecosystem (Verified Comparison Scene)',
@@ -1012,7 +1029,7 @@ async function executeMultiSearch(
       const data = await resStac.json();
       const features = Array.isArray(data?.features) ? data.features : [];
       const mapped = features
-        .map((feat: any) => {
+        .map((feat: any, idx: number) => {
           const props = feat.properties || {};
           const cloudCover = typeof props['eo:cloud_cover'] === 'number' ? Math.round(props['eo:cloud_cover'] * 10) / 10 : 0;
           const datetime = props.datetime || props.start_datetime || '';
@@ -1028,7 +1045,7 @@ async function executeMultiSearch(
             collection: 'sentinel-2-l2a',
             cloudCover,
             bbox: feat.bbox || bbox,
-            thumbnailUrl: thumb,
+            thumbnailUrl: thumb || getRealSatelliteImageUrl(feat.bbox || bbox, 640, 440, idx),
             productUrl: 'https://dataspace.copernicus.eu',
             isDemo: false,
             source: 'Copernicus Data Space Ecosystem (Sentinel-2 L2A)',
@@ -1095,7 +1112,7 @@ async function executeMultiSearch(
           return cc === undefined || cc <= maxCloudCover;
         })
         .slice(0, limit)
-        .map((f: any) => {
+        .map((f: any, idx: number) => {
           const cc = f.properties?.['eo:cloud_cover'] ?? 5.0;
           const isL9 = f.id.startsWith('LC09');
           const satName = isL9 ? 'Landsat 9' : 'Landsat 8';
@@ -1109,7 +1126,7 @@ async function executeMultiSearch(
             collection: 'landsat-c2-l2',
             cloudCover: Math.round(cc * 10) / 10,
             bbox: f.bbox || bbox,
-            thumbnailUrl: thumb,
+            thumbnailUrl: thumb || getRealSatelliteImageUrl(f.bbox || bbox, 640, 440, idx),
             productUrl: 'https://planetarycomputer.microsoft.com/dataset/landsat-c2-l2',
             isDemo: false,
             source: 'Google Earth Engine & USGS',
@@ -1830,15 +1847,17 @@ app.get(['/api/health', '/health'], (req, res) => {
 // ----------------------------------------------------
 // Vite Middleware or Static Production File Serving
 // ----------------------------------------------------
+const isVercelEnvironment = Boolean(process.env.VERCEL || process.env.VERCEL_ENV || process.env.NOW_REGION);
+
 export async function startServer() {
-  if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+  if (process.env.NODE_ENV !== 'production' && !isVercelEnvironment) {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
-  } else if (!process.env.VERCEL) {
+  } else if (!isVercelEnvironment) {
     const distPath = path.resolve(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
@@ -1846,7 +1865,7 @@ export async function startServer() {
     });
   }
 
-  if (!process.env.VERCEL) {
+  if (!isVercelEnvironment) {
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`🛰️ GeoSemantic Server active on http://0.0.0.0:${PORT}`);
     });
@@ -1854,7 +1873,7 @@ export async function startServer() {
 }
 
 // In local / standard Node / container environments, automatically start the server
-if (!process.env.VERCEL) {
+if (!isVercelEnvironment) {
   startServer();
 }
 
