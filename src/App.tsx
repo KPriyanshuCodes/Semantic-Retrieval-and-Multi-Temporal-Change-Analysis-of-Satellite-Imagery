@@ -8,7 +8,7 @@ import { HistoryPanel } from './components/HistoryPanel';
 import { PrivacyModals } from './components/PrivacyModals';
 import { CookieBanner } from './components/CookieBanner';
 import { SemanticParsedQuery, GeocodeResult, SatelliteScene, AnalysisResult, CookiePreferences } from './types';
-import { computeClientAnalysis } from './utils/clientFallbackSearch';
+import { computeClientAnalysis, generateClientDemoScenes } from './utils/clientFallbackSearch';
 import {
   recommendSatellitePair,
   validatePairSelection,
@@ -73,18 +73,28 @@ export default function App() {
     try {
       let data = multiResult;
       if (!data && geocode) {
-        const multiRes = await fetch('/api/satellite/multi-search', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            bbox: geocode.bbox,
-            startDate: parsed.startDate,
-            endDate: parsed.endDate,
-            maxCloudCover: parsed.maxCloudCover,
-            location: geocode.place,
-          }),
-        });
-        data = await multiRes.json();
+        try {
+          const multiRes = await fetch('/api/satellite/multi-search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              bbox: geocode.bbox,
+              startDate: parsed.startDate,
+              endDate: parsed.endDate,
+              maxCloudCover: parsed.maxCloudCover,
+              location: geocode.place,
+            }),
+          });
+          if (multiRes.ok) {
+            data = await multiRes.json();
+          }
+        } catch (fetchErr) {
+          console.warn('Satellite multi-search API call failed, generating localized scenes:', fetchErr);
+        }
+
+        if (!data || (!data.sentinel2 && !data.landsat)) {
+          data = generateClientDemoScenes(geocode.bbox, parsed.startDate, parsed.endDate);
+        }
       }
 
       setMultiSearchResult(data);

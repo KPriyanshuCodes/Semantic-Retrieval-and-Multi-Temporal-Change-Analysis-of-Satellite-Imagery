@@ -141,22 +141,84 @@ const geocodeCache = new Map<string, any>();
 // In-memory cache for satellite searches to make repeat and interactive queries instant
 const satelliteSearchCache = new Map<string, any>();
 
+// Common Indian city spelling variations and alternate / historical names
+const INDIAN_SPELLING_ALIASES: Record<string, string> = {
+  bangalore: 'Bengaluru',
+  bengaluru: 'Bengaluru',
+  bombay: 'Mumbai',
+  mumbai: 'Mumbai',
+  calcutta: 'Kolkata',
+  kolkata: 'Kolkata',
+  madras: 'Chennai',
+  chennai: 'Chennai',
+  poona: 'Pune',
+  pune: 'Pune',
+  baroda: 'Vadodara',
+  vadodara: 'Vadodara',
+  mysore: 'Mysuru',
+  mysuru: 'Mysuru',
+  cochin: 'Kochi',
+  kochi: 'Kochi',
+  trivandrum: 'Thiruvananthapuram',
+  thiruvananthapuram: 'Thiruvananthapuram',
+  calicut: 'Kozhikode',
+  kozhikode: 'Kozhikode',
+  banaras: 'Varanasi',
+  kashi: 'Varanasi',
+  varanasi: 'Varanasi',
+  allahabad: 'Prayagraj',
+  prayagraj: 'Prayagraj',
+  gurgaon: 'Gurugram',
+  gurugram: 'Gurugram',
+  pondicherry: 'Puducherry',
+  puducherry: 'Puducherry',
+  belgaum: 'Belagavi',
+  belagavi: 'Belagavi',
+  mangalore: 'Mangaluru',
+  mangaluru: 'Mangaluru',
+  hubli: 'Hubballi',
+  hubballi: 'Hubballi',
+  simla: 'Shimla',
+  shimla: 'Shimla',
+  vizag: 'Visakhapatnam',
+  visakhapatnam: 'Visakhapatnam',
+  trichy: 'Tiruchirappalli',
+  tiruchirappalli: 'Tiruchirappalli',
+  jullundur: 'Jalandhar',
+  jalandhar: 'Jalandhar',
+  panjim: 'Panaji',
+  panaji: 'Panaji',
+  gauhati: 'Guwahati',
+  guwahati: 'Guwahati',
+  orissa: 'Odisha',
+  odisha: 'Odisha',
+};
+
 // Pre-seeded geographic coordinates for top locations to make geocoding instant (0ms)
-const PRESEEDED_GEOCODES: Record<string, { lat: number; lon: number; bbox: [number, number, number, number]; displayName: string }> = {
-  // India
+const PRESEEDED_GEOCODES: Record<string, { lat: number; lon: number; bbox: [number, number, number, number]; displayName: string; candidates?: any[] }> = {
+  // India - Primary Cities & Towns
   bhopal: { lat: 23.2599, lon: 77.4126, bbox: [77.24, 23.09, 77.56, 23.41], displayName: 'Bhopal, Madhya Pradesh, India' },
+  indore: { lat: 22.7196, lon: 75.8577, bbox: [75.75, 22.62, 75.95, 22.82], displayName: 'Indore, Madhya Pradesh, India' },
   mumbai: { lat: 19.0760, lon: 72.8777, bbox: [72.775, 18.892, 72.986, 19.271], displayName: 'Mumbai, Maharashtra, India' },
-  bengaluru: { lat: 12.9716, lon: 77.5946, bbox: [77.46, 12.83, 77.74, 13.14], displayName: 'Bengaluru, Karnataka, India' },
-  bangalore: { lat: 12.9716, lon: 77.5946, bbox: [77.46, 12.83, 77.74, 13.14], displayName: 'Bengaluru, Karnataka, India' },
   delhi: { lat: 28.6139, lon: 77.2090, bbox: [76.84, 28.40, 77.34, 28.88], displayName: 'Delhi, India' },
   'new delhi': { lat: 28.6139, lon: 77.2090, bbox: [76.84, 28.40, 77.34, 28.88], displayName: 'New Delhi, Delhi, India' },
+  pune: { lat: 18.5204, lon: 73.8567, bbox: [73.72, 18.41, 73.98, 18.62], displayName: 'Pune, Maharashtra, India' },
+  jaipur: { lat: 26.9124, lon: 75.7873, bbox: [75.68, 26.79, 75.92, 27.02], displayName: 'Jaipur, Rajasthan, India' },
+  bengaluru: { lat: 12.9716, lon: 77.5946, bbox: [77.46, 12.83, 77.74, 13.14], displayName: 'Bengaluru, Karnataka, India' },
+  bangalore: { lat: 12.9716, lon: 77.5946, bbox: [77.46, 12.83, 77.74, 13.14], displayName: 'Bengaluru, Karnataka, India' },
+  dewas: { lat: 22.9676, lon: 76.0534, bbox: [75.96, 22.88, 76.14, 23.05], displayName: 'Dewas, Madhya Pradesh, India' },
+  ratlam: { lat: 23.3315, lon: 75.0367, bbox: [74.95, 23.24, 75.12, 23.42], displayName: 'Ratlam, Madhya Pradesh, India' },
+  ujjain: { lat: 23.1765, lon: 75.7885, bbox: [75.70, 23.10, 75.88, 23.25], displayName: 'Ujjain, Madhya Pradesh, India' },
+  siliguri: { lat: 26.7271, lon: 88.3953, bbox: [88.31, 26.64, 88.48, 26.81], displayName: 'Siliguri, West Bengal, India' },
+  kurnool: { lat: 15.8281, lon: 78.0373, bbox: [77.95, 15.74, 78.12, 15.91], displayName: 'Kurnool, Andhra Pradesh, India' },
+  solapur: { lat: 17.6599, lon: 75.9064, bbox: [75.81, 17.57, 75.99, 17.75], displayName: 'Solapur, Maharashtra, India' },
+  alwar: { lat: 27.5530, lon: 76.6346, bbox: [76.54, 27.46, 76.72, 27.64], displayName: 'Alwar, Rajasthan, India' },
+  belgaum: { lat: 15.8497, lon: 74.4977, bbox: [74.41, 15.77, 74.58, 15.93], displayName: 'Belagavi (Belgaum), Karnataka, India' },
+  belagavi: { lat: 15.8497, lon: 74.4977, bbox: [74.41, 15.77, 74.58, 15.93], displayName: 'Belagavi (Belgaum), Karnataka, India' },
   hyderabad: { lat: 17.3850, lon: 78.4867, bbox: [78.23, 17.20, 78.62, 17.58], displayName: 'Hyderabad, Telangana, India' },
   chennai: { lat: 13.0827, lon: 80.2707, bbox: [80.12, 12.92, 80.35, 13.23], displayName: 'Chennai, Tamil Nadu, India' },
   kolkata: { lat: 22.5726, lon: 88.3639, bbox: [88.24, 22.44, 88.46, 22.65], displayName: 'Kolkata, West Bengal, India' },
   ahmedabad: { lat: 23.0225, lon: 72.5714, bbox: [72.46, 22.92, 72.68, 23.12], displayName: 'Ahmedabad, Gujarat, India' },
-  pune: { lat: 18.5204, lon: 73.8567, bbox: [73.72, 18.41, 73.98, 18.62], displayName: 'Pune, Maharashtra, India' },
-  jaipur: { lat: 26.9124, lon: 75.7873, bbox: [75.68, 26.79, 75.92, 27.02], displayName: 'Jaipur, Rajasthan, India' },
-  indore: { lat: 22.7196, lon: 75.8577, bbox: [75.75, 22.62, 75.95, 22.82], displayName: 'Indore, Madhya Pradesh, India' },
   lucknow: { lat: 26.8467, lon: 80.9462, bbox: [80.82, 26.74, 81.04, 26.95], displayName: 'Lucknow, Uttar Pradesh, India' },
   chandigarh: { lat: 30.7333, lon: 76.7794, bbox: [76.70, 30.67, 76.85, 30.79], displayName: 'Chandigarh, India' },
   nagpur: { lat: 21.1458, lon: 79.0882, bbox: [78.98, 21.05, 79.18, 21.22], displayName: 'Nagpur, Maharashtra, India' },
@@ -169,7 +231,6 @@ const PRESEEDED_GEOCODES: Record<string, { lat: number; lon: number; bbox: [numb
   agra: { lat: 27.1767, lon: 78.0081, bbox: [77.90, 27.10, 78.10, 27.25], displayName: 'Agra, Uttar Pradesh, India' },
   gwalior: { lat: 26.2183, lon: 78.1828, bbox: [78.10, 26.12, 78.26, 26.30], displayName: 'Gwalior, Madhya Pradesh, India' },
   jabalpur: { lat: 23.1815, lon: 79.9864, bbox: [79.88, 23.10, 80.08, 23.26], displayName: 'Jabalpur, Madhya Pradesh, India' },
-  ujjain: { lat: 23.1765, lon: 75.7885, bbox: [75.70, 23.10, 75.88, 23.25], displayName: 'Ujjain, Madhya Pradesh, India' },
   visakhapatnam: { lat: 17.6868, lon: 83.2185, bbox: [83.15, 17.60, 83.35, 17.80], displayName: 'Visakhapatnam, Andhra Pradesh, India' },
   vijayawada: { lat: 16.5062, lon: 80.6480, bbox: [80.55, 16.42, 80.75, 16.58], displayName: 'Vijayawada, Andhra Pradesh, India' },
   coimbatore: { lat: 11.0168, lon: 76.9558, bbox: [76.88, 10.92, 77.05, 11.10], displayName: 'Coimbatore, Tamil Nadu, India' },
@@ -183,6 +244,24 @@ const PRESEEDED_GEOCODES: Record<string, { lat: number; lon: number; bbox: [numb
   srinagar: { lat: 34.0837, lon: 74.7973, bbox: [74.70, 34.00, 74.90, 34.16], displayName: 'Srinagar, Jammu and Kashmir, India' },
   amritsar: { lat: 31.6340, lon: 74.8723, bbox: [74.78, 31.55, 74.96, 31.72], displayName: 'Amritsar, Punjab, India' },
   guwahati: { lat: 26.1445, lon: 91.7362, bbox: [91.60, 26.05, 91.88, 26.24], displayName: 'Guwahati, Assam, India' },
+  jodhpur: { lat: 26.2389, lon: 73.0243, bbox: [72.94, 26.16, 73.11, 26.32], displayName: 'Jodhpur, Rajasthan, India' },
+  udaipur: { lat: 24.5854, lon: 73.7125, bbox: [73.64, 24.51, 73.79, 24.66], displayName: 'Udaipur, Rajasthan, India' },
+  nashik: { lat: 19.9975, lon: 73.7898, bbox: [73.71, 19.92, 73.87, 20.07], displayName: 'Nashik, Maharashtra, India' },
+  thane: { lat: 19.2183, lon: 72.9781, bbox: [72.91, 19.14, 73.05, 19.29], displayName: 'Thane, Maharashtra, India' },
+  gorakhpur: { lat: 26.7606, lon: 83.3732, bbox: [83.30, 26.68, 83.45, 26.84], displayName: 'Gorakhpur, Uttar Pradesh, India' },
+  aligarh: { lat: 27.8974, lon: 78.0880, bbox: [78.01, 27.82, 78.16, 27.97], displayName: 'Aligarh, Uttar Pradesh, India' },
+  bareilly: { lat: 28.3670, lon: 79.4304, bbox: [79.35, 28.29, 79.51, 28.44], displayName: 'Bareilly, Uttar Pradesh, India' },
+  meerut: { lat: 28.9845, lon: 77.7064, bbox: [77.63, 28.91, 77.78, 29.06], displayName: 'Meerut, Uttar Pradesh, India' },
+  jhansi: { lat: 25.4484, lon: 78.5685, bbox: [78.50, 25.37, 78.64, 25.52], displayName: 'Jhansi, Uttar Pradesh, India' },
+  prayagraj: { lat: 25.4358, lon: 81.8463, bbox: [81.76, 25.36, 81.93, 25.51], displayName: 'Prayagraj (Allahabad), Uttar Pradesh, India' },
+  gaya: { lat: 24.7914, lon: 85.0002, bbox: [84.93, 24.72, 85.07, 24.86], displayName: 'Gaya, Bihar, India' },
+  muzaffarpur: { lat: 26.1209, lon: 85.3647, bbox: [85.29, 26.05, 85.44, 26.19], displayName: 'Muzaffarpur, Bihar, India' },
+  tirupati: { lat: 13.6288, lon: 79.4192, bbox: [79.35, 13.55, 79.49, 13.70], displayName: 'Tirupati, Andhra Pradesh, India' },
+  warangal: { lat: 17.9689, lon: 79.5941, bbox: [79.51, 17.90, 79.67, 18.04], displayName: 'Warangal, Telangana, India' },
+  noida: { lat: 28.5355, lon: 77.3910, bbox: [77.30, 28.46, 77.47, 28.61], displayName: 'Noida, Uttar Pradesh, India' },
+  gurugram: { lat: 28.4595, lon: 77.0266, bbox: [76.95, 28.38, 77.10, 28.53], displayName: 'Gurugram (Gurgaon), Haryana, India' },
+  faridabad: { lat: 28.4089, lon: 77.3178, bbox: [77.24, 28.33, 77.39, 28.48], displayName: 'Faridabad, Haryana, India' },
+  ghaziabad: { lat: 28.6692, lon: 77.4538, bbox: [77.38, 28.59, 77.53, 28.74], displayName: 'Ghaziabad, Uttar Pradesh, India' },
 
   // World Metropolises & Regions
   london: { lat: 51.5074, lon: -0.1278, bbox: [-0.35, 51.38, 0.15, 51.65], displayName: 'London, Greater London, United Kingdom' },
@@ -325,138 +404,47 @@ function parseQueryRuleBased(query: string) {
     }
   }
 
-  // 2c. Known prominent locations dictionary (covers major Indian & global cities, states, districts)
+  // 2c. Fallback direct extraction for pure location searches or non-prepositional queries
+  // (e.g. "Bhopal", "bhopal", "BHOPAL", "BhoPal", "Indore", "Dewas", "Ratlam", "Siliguri 2020-2024", "Kota urban", etc.)
   if (!detectedLocation) {
-    const knownLocations = [
-      'bhopal',
-      'indore',
-      'jabalpur',
-      'gwalior',
-      'ujjain',
-      'mumbai',
-      'pune',
-      'nagpur',
-      'nashik',
-      'thane',
-      'bengaluru',
-      'bangalore',
-      'mysuru',
-      'mysore',
-      'hubli',
-      'mangaluru',
-      'mangalore',
-      'hyderabad',
-      'warangal',
-      'secunderabad',
-      'chennai',
-      'madras',
-      'coimbatore',
-      'madurai',
-      'tiruchirappalli',
-      'delhi',
-      'new delhi',
-      'noida',
-      'gurugram',
-      'gurgaon',
-      'faridabad',
-      'ghaziabad',
-      'kolkata',
-      'calcutta',
-      'howrah',
-      'ahmedabad',
-      'surat',
-      'vadodara',
-      'baroda',
-      'rajkot',
-      'jaipur',
-      'jodhpur',
-      'udaipur',
-      'kota',
-      'lucknow',
-      'kanpur',
-      'varanasi',
-      'banaras',
-      'agra',
-      'prayagraj',
-      'allahabad',
-      'meerut',
-      'patna',
-      'gaya',
-      'bhagalpur',
-      'muzaffarpur',
-      'ranchi',
-      'jamshedpur',
-      'dhanbad',
-      'bhubaneswar',
-      'cuttack',
-      'puri',
-      'rourkela',
-      'chandigarh',
-      'amritsar',
-      'ludhiana',
-      'jalandhar',
-      'dehradun',
-      'haridwar',
-      'rishikesh',
-      'shimla',
-      'dharamshala',
-      'srinagar',
-      'jammu',
-      'guwahati',
-      'shillong',
-      'imphal',
-      'agartala',
-      'aizawl',
-      'kohima',
-      'gangtok',
-      'kochi',
-      'cochin',
-      'thiruvananthapuram',
-      'trivandrum',
-      'kozhikode',
-      'calicut',
-      'visakhapatnam',
-      'vizag',
-      'vijayawada',
-      'guntur',
-      'raipur',
-      'bilaspur',
-      'goa',
-      'panaji',
-      'madhya pradesh',
-      'maharashtra',
-      'karnataka',
-      'telangana',
-      'tamil nadu',
-      'uttar pradesh',
-      'rajasthan',
-      'gujarat',
-      'west bengal',
-      'bihar',
-      'odisha',
-      'punjab',
-      'haryana',
-      'kerala',
-      'andhra pradesh',
-    ];
+    let stripped = lower
+      // Remove year/date ranges
+      .replace(/\b(?:between|from)\s+\d{4}\s+(?:and|to)\s+\d{4}\b/gi, '')
+      .replace(/\b\d{4}\s*[-–to]+\s*\d{4}\b/gi, '')
+      .replace(/\b(19\d\d|20\d\d)\b/g, '')
+      // Remove cloud patterns
+      .replace(/(?:cloud(?: cover)?|clouds?)\s*(?:<|below|under|less than)?\s*\d{1,2}%?/gi, '')
+      // Remove verbs and noise action keywords
+      .replace(/\b(?:analyze|explore|examine|study|monitor|track|inspect|survey|map|show|search|find|view|display|fetch|get)\b/gi, '')
+      // Remove topic keywords
+      .replace(/\b(?:urban|built-up|expansion|construction|infrastructure|impervious|growth|vegetation|forest|tree|canopy|green|deforestation|afforestation|agriculture|crop|water|lake|river|reservoir|flood|pond|wetland|changes?|differencing|temporal|satellite|imagery|observations?|data)\b/gi, '')
+      // Remove prepositions and articles
+      .replace(/\b(?:in|of|around|near|for|over|at|across|within|covering|surrounding|between|from|during|with|after|before|to|since|the|an?)\b/gi, '')
+      .replace(/^[,\s.-]+|[,\s.-]+$/g, '')
+      .trim();
 
-    for (const loc of knownLocations) {
-      if (new RegExp(`\\b${loc}\\b`, 'i').test(lower)) {
-        detectedLocation = loc
-          .split(' ')
-          .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-          .join(' ');
-        break;
-      }
+    if (stripped.length >= 2 && !invalidLocationWords.has(stripped.toLowerCase())) {
+      detectedLocation = stripped;
     }
   }
 
-  // Capitalize properly if extracted from prepositions
+  // Normalize, clean trailing noise, and apply canonical spelling
   if (detectedLocation) {
     detectedLocation = detectedLocation
-      .split(' ')
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-      .join(' ');
+      .replace(/\b(?:city|town|district|village|area|region)\b/gi, '')
+      .replace(/^[,\s.-]+|[,\s.-]+$/g, '')
+      .trim();
+
+    const lowerKey = detectedLocation.toLowerCase();
+    if (INDIAN_SPELLING_ALIASES[lowerKey]) {
+      detectedLocation = INDIAN_SPELLING_ALIASES[lowerKey];
+    } else {
+      detectedLocation = detectedLocation
+        .split(' ')
+        .filter(Boolean)
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+        .join(' ');
+    }
   }
 
   // 3. Date range detection: e.g. "between 2020 and 2026", "from 2019 to 2024", "in 2023"
@@ -628,92 +616,278 @@ function generateDemoScenes(
   };
 }
 
-// High-speed Geocoding Resolver (0ms pre-seed lookup + fast 2.5s Nominatim timeout)
+// High-speed Proper Geocoding Resolver with Disambiguation Support
 async function resolveGeocode(place: string) {
   let cleanPlace = place
+    .replace(/^["'`\s]+|["'`\s]+$/g, '')
     .replace(/^(?:forest area of|forests of|forest near|urban expansion near|urban growth in|water changes near|changes in|changes around|around|near|in|of|for|at|over)\s+/i, '')
+    .replace(/\b(?:city|town|district|village)\b/gi, '')
     .trim();
+
+  if (!cleanPlace) {
+    return {
+      found: false,
+      place: '',
+      displayName: '',
+      lat: 0,
+      lon: 0,
+      bbox: [0, 0, 0, 0] as [number, number, number, number],
+      error: 'Please specify a geographical location name.',
+      candidates: [],
+      needsDisambiguation: false,
+    };
+  }
+
+  const lowerKey = cleanPlace.toLowerCase();
+  if (INDIAN_SPELLING_ALIASES[lowerKey]) {
+    cleanPlace = INDIAN_SPELLING_ALIASES[lowerKey];
+  }
 
   const cacheKey = cleanPlace.toLowerCase();
   if (geocodeCache.has(cacheKey)) {
     return { found: true, cached: true, ...geocodeCache.get(cacheKey) };
   }
 
+  // Pre-seeded lookup for instant 0ms response on exact matches
   if (PRESEEDED_GEOCODES[cacheKey]) {
     const p = PRESEEDED_GEOCODES[cacheKey];
     const res = {
       found: true,
-      place: cleanPlace.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+      place: cleanPlace.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' '),
       displayName: p.displayName,
       lat: p.lat,
       lon: p.lon,
       bbox: p.bbox,
-      candidates: [{ place: cleanPlace, displayName: p.displayName, lat: p.lat, lon: p.lon, bbox: p.bbox, type: 'city', importance: 0.95 }],
-      attribution: 'Data © OpenStreetMap contributors, ODbL 1.0 (Cached)',
+      candidates: p.candidates || [{
+        place: cleanPlace.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' '),
+        displayName: p.displayName,
+        lat: p.lat,
+        lon: p.lon,
+        bbox: p.bbox,
+        type: 'city',
+        importance: 0.95,
+      }],
+      needsDisambiguation: false,
+      attribution: 'Data © OpenStreetMap contributors, ODbL 1.0 (Verified Cache)',
     };
     geocodeCache.set(cacheKey, res);
     return res;
   }
 
-  // Fast sub-key matching for regional variations (e.g. "Bhopal city", "Greater London")
-  for (const [key, p] of Object.entries(PRESEEDED_GEOCODES)) {
-    if (key.length >= 4 && (cacheKey.includes(key) || (cleanPlace.length >= 4 && key.includes(cacheKey)))) {
-      const res = {
-        found: true,
-        place: cleanPlace.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
-        displayName: p.displayName,
-        lat: p.lat,
-        lon: p.lon,
-        bbox: p.bbox,
-        candidates: [{ place: cleanPlace, displayName: p.displayName, lat: p.lat, lon: p.lon, bbox: p.bbox, type: 'city', importance: 0.92 }],
-        attribution: 'Data © OpenStreetMap contributors, ODbL 1.0 (Fast Match)',
-      };
-      geocodeCache.set(cacheKey, res);
-      return res;
+  // Helper to extract state or province from displayName
+  const extractStateOrRegion = (displayName: string): string => {
+    const parts = displayName.split(',').map((p) => p.trim());
+    if (parts.length >= 2) {
+      return parts[parts.length - 2] || '';
     }
-  }
+    return '';
+  };
 
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 1500);
-    const nominatimUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cleanPlace)}&limit=5&addressdetails=1`;
+    let rawData: any = null;
+    const hasExplicitCountry =
+      cleanPlace.includes(',') ||
+      /\b(?:india|usa|uk|japan|france|germany|canada|australia)\b/i.test(cleanPlace);
+
+  // 1. Primary Geocoder: OpenStreetMap Nominatim with 2500ms timeout
+  try {
+    const nomController = new AbortController();
+    const nomTimeout = setTimeout(() => nomController.abort(), 2500);
+
+    const nominatimUrl = hasExplicitCountry
+      ? `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cleanPlace)}&limit=10&addressdetails=1`
+      : `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cleanPlace + ', India')}&limit=10&addressdetails=1`;
+
     const geoRes = await fetch(nominatimUrl, {
       headers: {
-        'User-Agent': 'GeoSemantic-EarthObservation/1.0 (app: satellite-retrieval)',
+        'User-Agent': 'GeoSemantic-EarthObservation/1.0 (satellite-retrieval)',
         Accept: 'application/json',
         'Accept-Language': 'en',
       },
-      signal: controller.signal,
+      signal: nomController.signal,
     });
-    clearTimeout(timeoutId);
+    clearTimeout(nomTimeout);
 
-    if (!geoRes.ok) throw new Error(`Nominatim status ${geoRes.status}`);
-    const data: any = await geoRes.json();
-    if (!Array.isArray(data) || data.length === 0) {
-      return {
-        found: false,
-        place: cleanPlace,
-        error: `Could not find geographic coordinates for "${cleanPlace}". Please verify spelling.`,
-      };
+    if (geoRes.ok) {
+      rawData = await geoRes.json();
     }
+  } catch {
+    // Nominatim failed, timed out, or rate-limited; proceeding to fallback
+  }
 
-    const candidates = data.map((item: any) => {
+  // If query with ', India' returned no results and wasn't explicit, retry worldwide Nominatim
+  if ((!Array.isArray(rawData) || rawData.length === 0) && !hasExplicitCountry) {
+    try {
+      const nomWwController = new AbortController();
+      const nomWwTimeout = setTimeout(() => nomWwController.abort(), 2000);
+      const fallbackUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cleanPlace)}&limit=10&addressdetails=1`;
+      const fallbackRes = await fetch(fallbackUrl, {
+        headers: {
+          'User-Agent': 'GeoSemantic-EarthObservation/1.0 (satellite-retrieval)',
+          Accept: 'application/json',
+          'Accept-Language': 'en',
+        },
+        signal: nomWwController.signal,
+      });
+      clearTimeout(nomWwTimeout);
+      if (fallbackRes.ok) {
+        rawData = await fallbackRes.json();
+      }
+    } catch {
+      // Continue to Photon
+    }
+  }
+
+  // 2. High-speed Resilient Fallback Geocoder: Photon API (Komoot OpenStreetMap index)
+  if (!Array.isArray(rawData) || rawData.length === 0) {
+    try {
+      const photonController = new AbortController();
+      const photonTimeout = setTimeout(() => photonController.abort(), 3000);
+      const photonQuery = hasExplicitCountry ? cleanPlace : `${cleanPlace}, India`;
+      const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(photonQuery)}&limit=10`;
+
+      const photonRes = await fetch(photonUrl, {
+        headers: { Accept: 'application/json' },
+        signal: photonController.signal,
+      });
+      clearTimeout(photonTimeout);
+
+      if (photonRes.ok) {
+        const photonData: any = await photonRes.json();
+        if (photonData?.features && photonData.features.length > 0) {
+          rawData = photonData.features.map((f: any) => {
+            const coords = f.geometry.coordinates; // [lon, lat]
+            const p = f.properties || {};
+            const name = p.name || cleanPlace;
+            const parts = [name, p.district, p.state, p.country].filter(Boolean);
+            return {
+              name,
+              display_name: parts.join(', '),
+              lat: coords[1],
+              lon: coords[0],
+              type: p.osm_value || 'city',
+              importance: 0.8,
+              address: { state: p.state, country: p.country },
+              boundingbox: [
+                (coords[1] - 0.1).toFixed(4),
+                (coords[1] + 0.1).toFixed(4),
+                (coords[0] - 0.12).toFixed(4),
+                (coords[0] + 0.12).toFixed(4),
+              ],
+            };
+          });
+        }
+      }
+
+      // If query with ', India' returned nothing, try worldwide cleanPlace in Photon
+      if ((!Array.isArray(rawData) || rawData.length === 0) && !hasExplicitCountry) {
+        const photonWwController = new AbortController();
+        const photonWwTimeout = setTimeout(() => photonWwController.abort(), 2000);
+        const photonWwUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(cleanPlace)}&limit=10`;
+        const photonWwRes = await fetch(photonWwUrl, {
+          headers: { Accept: 'application/json' },
+          signal: photonWwController.signal,
+        });
+        clearTimeout(photonWwTimeout);
+
+        if (photonWwRes.ok) {
+          const photonData: any = await photonWwRes.json();
+          if (photonData?.features && photonData.features.length > 0) {
+            rawData = photonData.features.map((f: any) => {
+              const coords = f.geometry.coordinates;
+              const p = f.properties || {};
+              const name = p.name || cleanPlace;
+              const parts = [name, p.district, p.state, p.country].filter(Boolean);
+              return {
+                name,
+                display_name: parts.join(', '),
+                lat: coords[1],
+                lon: coords[0],
+                type: p.osm_value || 'city',
+                importance: 0.8,
+                address: { state: p.state, country: p.country },
+                boundingbox: [
+                  (coords[1] - 0.1).toFixed(4),
+                  (coords[1] + 0.1).toFixed(4),
+                  (coords[0] - 0.12).toFixed(4),
+                  (coords[0] + 0.12).toFixed(4),
+                ],
+              };
+            });
+          }
+        }
+      }
+    } catch (photonErr) {
+      console.warn('Photon fallback geocoder error:', photonErr);
+    }
+  }
+
+  if (!Array.isArray(rawData) || rawData.length === 0) {
+    return {
+      found: false,
+      place: cleanPlace,
+      displayName: '',
+      lat: 0,
+      lon: 0,
+      bbox: [0, 0, 0, 0] as [number, number, number, number],
+      error: `Could not find geographic coordinates for "${cleanPlace}". Please verify spelling or specify the state/district.`,
+      candidates: [],
+      needsDisambiguation: false,
+    };
+  }
+
+    // Parse candidate items
+    const parsedCandidates = rawData.map((item: any) => {
       const lat = parseFloat(item.lat);
       const lon = parseFloat(item.lon);
-      const b = item.boundingbox.map((v: string) => parseFloat(v));
-      const bbox: [number, number, number, number] = [b[2], b[0], b[3], b[1]];
+      let bbox: [number, number, number, number];
+
+      if (item.boundingbox && item.boundingbox.length >= 4) {
+        const b = item.boundingbox.map((v: string) => parseFloat(v));
+        bbox = [b[2], b[0], b[3], b[1]];
+      } else {
+        bbox = [lon - 0.12, lat - 0.10, lon + 0.12, lat + 0.10];
+      }
+
+      // Check if bounding box is too narrow (point or tiny polygon < 0.06 deg); expand for proper satellite footprint
+      if (bbox[2] - bbox[0] < 0.06 || bbox[3] - bbox[1] < 0.06) {
+        bbox = [lon - 0.12, lat - 0.10, lon + 0.12, lat + 0.10];
+      }
+
+      const state = item.address?.state || extractStateOrRegion(item.display_name);
+
       return {
         place: item.name || cleanPlace,
         displayName: item.display_name,
+        state,
         lat,
         lon,
         bbox,
-        type: item.type,
-        importance: item.importance,
+        type: item.type || 'city',
+        importance: item.importance || 0.8,
       };
     });
 
-    const primary = candidates[0];
+    // Deduplicate candidates that represent the same locality
+    const distinctCandidates: typeof parsedCandidates = [];
+    for (const cand of parsedCandidates) {
+      const isDuplicate = distinctCandidates.some((d) => {
+        const distKm = Math.hypot(d.lat - cand.lat, d.lon - cand.lon) * 111;
+        // Same locality if within 30km or same state and within 45km
+        return (
+          distKm < 30 ||
+          (d.state && cand.state && d.state.toLowerCase() === cand.state.toLowerCase() && distKm < 45)
+        );
+      });
+      if (!isDuplicate) {
+        distinctCandidates.push(cand);
+      }
+    }
+
+    // Ambiguity detection: if there are multiple places in different regions/states
+    const needsDisambiguation = distinctCandidates.length > 1;
+    const primary = distinctCandidates[0] || parsedCandidates[0];
+
     const result = {
       found: true,
       place: primary.place,
@@ -721,16 +895,24 @@ async function resolveGeocode(place: string) {
       lat: primary.lat,
       lon: primary.lon,
       bbox: primary.bbox,
-      candidates,
+      candidates: distinctCandidates.slice(0, 5),
+      needsDisambiguation,
       attribution: 'Data © OpenStreetMap contributors, ODbL 1.0',
     };
+
     geocodeCache.set(cacheKey, result);
     return result;
   } catch (err: any) {
     return {
       found: false,
       place: cleanPlace,
-      error: `Geocoding lookup timed out or unavailable (${err.message}).`,
+      displayName: '',
+      lat: 0,
+      lon: 0,
+      bbox: [0, 0, 0, 0] as [number, number, number, number],
+      error: `Geocoding lookup timed out or unavailable (${err.message}). Please verify the location.`,
+      candidates: [],
+      needsDisambiguation: false,
     };
   }
 }
@@ -1295,50 +1477,23 @@ app.post(['/api/search-full', '/search-full'], async (req, res) => {
     });
   } catch (err: any) {
     console.error('Error in search-full endpoint:', err);
-    // Reliable graceful fallback: never return a raw 500 error to the client
     const fallbackParsed = parseQueryRuleBased(req.body?.query || '');
-    const fallbackBbox: [number, number, number, number] = [77.24, 23.09, 77.56, 23.41];
-    const demo = generateDemoScenes(fallbackBbox, fallbackParsed.startDate, fallbackParsed.endDate);
     res.json({
       parsed: fallbackParsed,
       geocode: {
-        found: true,
-        place: fallbackParsed.location || 'Selected Region',
-        displayName: `${fallbackParsed.location || 'Selected Region'}, Earth Observation AOI`,
-        lat: 23.2599,
-        lon: 77.4126,
-        bbox: fallbackBbox,
+        found: false,
+        place: fallbackParsed.location || '',
+        displayName: '',
+        lat: 0,
+        lon: 0,
+        bbox: [0, 0, 0, 0] as [number, number, number, number],
+        error: fallbackParsed.location
+          ? `Could not find geographic coordinates for "${fallbackParsed.location}". Please verify spelling or clarify the location.`
+          : 'Please specify an Indian city or town to analyze.',
+        candidates: [],
+        needsDisambiguation: false,
       },
-      multiResult: {
-        location: fallbackParsed.location || 'Selected Region',
-        bbox: fallbackBbox,
-        sentinel2: {
-          available: true,
-          source: 'Copernicus Data Space Ecosystem',
-          satellite: 'Sentinel-2',
-          count: demo.scenes.length,
-          dateRange: `${fallbackParsed.startDate} to ${fallbackParsed.endDate}`,
-          cloudCoverageRange: '2.4% – 6.8%',
-          scenes: demo.scenes,
-          message: 'Retrieved verified Sentinel-2 observations.',
-        },
-        landsat: {
-          available: true,
-          source: 'Google Earth Engine',
-          satellite: 'Landsat 8/9',
-          count: demo.scenes.length,
-          dateRange: `${fallbackParsed.startDate} to ${fallbackParsed.endDate}`,
-          cloudCoverageRange: '1.9% – 5.2%',
-          scenes: demo.scenes.map(s => ({
-            ...s,
-            id: s.id.replace('S2', 'LC08'),
-            satellite: 'Landsat 8',
-            collection: 'landsat-c2-l2',
-            source: 'Google Earth Engine & USGS Landsat Collection 2',
-          })),
-          message: 'Retrieved verified Landsat scenes.',
-        },
-      },
+      multiResult: null,
     });
   }
 });

@@ -102,14 +102,14 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
       // Validate location existence from query
       if (!parsed.location || !parsed.location.trim()) {
         setAwaitingLocationInput(true);
-        setErrorMessage('Please specify the city or region you want to analyze.');
+        setErrorMessage('Please specify an Indian city or town you want to analyze (e.g. Bhopal, Indore, Pune, Bengaluru).');
         return;
       }
 
       if (!data.geocode?.found) {
         setAwaitingLocationInput(true);
         setErrorMessage(
-          data.geocode?.error || `Could not find coordinates for "${parsed.location}". Please check spelling.`
+          data.geocode?.error || `Could not find coordinates for "${parsed.location}". Please check spelling or clarify the location.`
         );
         return;
       }
@@ -117,6 +117,11 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
       setGeocodeData(data.geocode);
       if (data.geocode.candidates && data.geocode.candidates.length > 0) {
         setSelectedCandidate(data.geocode.candidates[0]);
+      }
+
+      // If multiple places have the same name, ask user to select the intended one!
+      if (data.geocode.needsDisambiguation && data.geocode.candidates && data.geocode.candidates.length > 1) {
+        return;
       }
 
       onSearchComplete(parsed, data.geocode, data.multiResult);
@@ -127,7 +132,7 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
         if (fallback.parsed) setParsedData(fallback.parsed);
         if (!fallback.parsed?.location || !fallback.parsed.location.trim()) {
           setAwaitingLocationInput(true);
-          setErrorMessage('Please specify the city or region you want to analyze.');
+          setErrorMessage('Please specify an Indian city or town you want to analyze (e.g. Bhopal, Indore, Pune, Bengaluru).');
           return;
         }
         if (!fallback.geocode?.found) {
@@ -182,7 +187,7 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
       if (!data.geocode?.found) {
         setAwaitingLocationInput(true);
         setErrorMessage(
-          data.geocode?.error || `Could not find coordinates for "${locationStr}". Please check spelling.`
+          data.geocode?.error || `Could not find coordinates for "${locationStr}". Please check spelling or clarify the location.`
         );
         return;
       }
@@ -190,6 +195,10 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
       setGeocodeData(data.geocode);
       if (data.geocode.candidates && data.geocode.candidates.length > 0) {
         setSelectedCandidate(data.geocode.candidates[0]);
+      }
+
+      if (data.geocode.needsDisambiguation && data.geocode.candidates && data.geocode.candidates.length > 1) {
+        return;
       }
 
       onSearchComplete(currentParsed, data.geocode, data.multiResult);
@@ -207,19 +216,34 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
       lat: candidate.lat,
       lon: candidate.lon,
       bbox: candidate.bbox,
-      attribution: geocodeData?.attribution || 'OpenStreetMap',
+      attribution: geocodeData?.attribution || 'OpenStreetMap contributors',
       candidates: geocodeData?.candidates,
+      needsDisambiguation: false,
     };
     setGeocodeData(updatedGeocode);
 
-    if (parsedData) {
-      const updatedParsed: SemanticParsedQuery = {
-        ...parsedData,
-        location: candidate.place,
-      };
-      setParsedData(updatedParsed);
-      await executeGeocode(candidate.place, updatedParsed);
-    }
+    const baseParsed: SemanticParsedQuery = parsedData || {
+      location: candidate.place,
+      startDate: '2020-01-01',
+      endDate: '2026-12-31',
+      analysisType: 'vegetation',
+      maxCloudCover: 35,
+      satellite: 'Sentinel-2',
+      collection: 'sentinel-2-l2a',
+      confidence: 1.0,
+      needsClarification: false,
+      method: 'Manual Disambiguation Selection',
+    };
+
+    const updatedParsed: SemanticParsedQuery = {
+      ...baseParsed,
+      location: candidate.place,
+      needsClarification: false,
+    };
+    setParsedData(updatedParsed);
+
+    // Call onSearchComplete directly with chosen candidate and its exact bbox
+    onSearchComplete(updatedParsed, updatedGeocode, null);
   };
 
   const handleManualLocationSubmit = async (e: React.FormEvent) => {
@@ -345,22 +369,22 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
             </div>
           )}
 
-          {/* Explicit Location Input if Missing in Query */}
+          {/* Explicit Location Clarification Input */}
           {awaitingLocationInput && (
-            <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg space-y-2">
+            <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg space-y-3">
               <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900">
                 <HelpCircle className="w-4 h-4 text-amber-700" />
                 <span>Specify Location</span>
               </div>
               <p className="text-xs text-amber-800">
-                Please enter the target city or region to search satellite images:
+                Please enter or select an Indian city or town to search satellite images:
               </p>
               <form onSubmit={handleManualLocationSubmit} className="flex gap-2">
                 <input
                   type="text"
                   value={manualLocationInput}
                   onChange={(e) => setManualLocationInput(e.target.value)}
-                  placeholder="e.g. Bhopal, Mumbai, Bengaluru"
+                  placeholder="e.g. Bhopal, Indore, Pune, Bengaluru"
                   className="flex-1 text-xs p-2 rounded border border-amber-300 bg-white text-slate-900 focus:outline-none"
                 />
                 <button
@@ -371,6 +395,70 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
                   Search
                 </button>
               </form>
+              <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px] text-amber-900">
+                <span className="font-semibold">Quick select:</span>
+                {['Bhopal', 'Indore', 'Mumbai', 'Delhi', 'Pune', 'Jaipur', 'Bengaluru'].map((city) => (
+                  <button
+                    key={city}
+                    type="button"
+                    onClick={() => {
+                      setManualLocationInput(city);
+                      const baseParsed: SemanticParsedQuery = parsedData || {
+                        location: city,
+                        startDate: '2020-01-01',
+                        endDate: '2026-12-31',
+                        analysisType: 'vegetation',
+                        maxCloudCover: 35,
+                        satellite: 'Sentinel-2',
+                        collection: 'sentinel-2-l2a',
+                        confidence: 1.0,
+                        needsClarification: false,
+                      };
+                      executeGeocode(city, { ...baseParsed, location: city });
+                      setAwaitingLocationInput(false);
+                      setErrorMessage(null);
+                    }}
+                    className="px-2 py-0.5 rounded bg-white hover:bg-amber-100 border border-amber-300 text-amber-900 font-medium transition-colors"
+                  >
+                    {city}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Ambiguity Disambiguation Selection Card */}
+          {geocodeData && geocodeData.needsDisambiguation && geocodeData.candidates && geocodeData.candidates.length > 1 && (
+            <div className="mt-4 p-4 bg-amber-50/95 border border-amber-300 rounded-lg space-y-3">
+              <div className="flex items-center gap-2 text-xs font-bold text-amber-950">
+                <MapPin className="w-4 h-4 text-amber-700" />
+                <span>Multiple places named "{geocodeData.place}" found. Please select your intended location:</span>
+              </div>
+              <p className="text-[11px] text-amber-800">
+                Click on the correct region to load satellite observations:
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                {geocodeData.candidates.map((cand, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => handleSelectCandidate(cand)}
+                    className={`text-left p-3 rounded-md border transition-all text-xs ${
+                      selectedCandidate?.displayName === cand.displayName
+                        ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
+                        : 'bg-white text-slate-800 border-amber-200 hover:border-amber-400 hover:bg-amber-100/60'
+                    }`}
+                  >
+                    <div className="font-bold flex items-center justify-between">
+                      <span>{cand.place}</span>
+                      <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-amber-100 text-amber-900">
+                        {cand.state || cand.displayName.split(',')[1]?.trim() || 'Region'}
+                      </span>
+                    </div>
+                    <div className="text-[11px] mt-1 text-slate-600 line-clamp-1">{cand.displayName}</div>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </div>

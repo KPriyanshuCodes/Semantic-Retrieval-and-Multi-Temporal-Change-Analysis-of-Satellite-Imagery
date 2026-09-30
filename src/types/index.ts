@@ -22,6 +22,7 @@ export interface GeocodeCandidate {
   bbox: [number, number, number, number];
   type?: string;
   importance?: number;
+  state?: string;
 }
 
 export interface GeocodeResult {
@@ -34,6 +35,7 @@ export interface GeocodeResult {
   attribution?: string;
   candidates?: GeocodeCandidate[];
   error?: string;
+  needsDisambiguation?: boolean;
 }
 
 export interface SatelliteScene {
