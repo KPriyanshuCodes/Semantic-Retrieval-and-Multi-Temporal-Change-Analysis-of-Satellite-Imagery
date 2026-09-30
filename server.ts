@@ -1015,33 +1015,55 @@ async function executeMultiSearch(
   const startIso = startDate ? `${startDate}T00:00:00Z` : '2020-01-01T00:00:00Z';
   const endIso = endDate ? `${endDate}T23:59:59Z` : '2026-12-31T23:59:59Z';
 
-  // 1. Sentinel-2: High-speed query to Planetary Computer Sentinel-2 L2A STAC (~1.3s response)
+  // 1. Sentinel-2: Query Planetary Computer Sentinel-2 L2A STAC (Early + Late parallel query)
   const sentinelPromise = (async () => {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2000);
-      const resStac = await fetch('https://planetarycomputer.microsoft.com/api/stac/v1/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          collections: ['sentinel-2-l2a'],
-          bbox: bbox,
-          datetime: `${startIso}/${endIso}`,
-          limit: 25,
-        }),
-        signal: controller.signal,
-      });
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      const queryBody = {
+        collections: ['sentinel-2-l2a'],
+        bbox: bbox,
+        datetime: `${startIso}/${endIso}`,
+        query: { 'eo:cloud_cover': { lt: Math.max(maxCloudCover, 30) } },
+      };
+
+      const [resAsc, resDesc] = await Promise.all([
+        fetch('https://planetarycomputer.microsoft.com/api/stac/v1/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...queryBody,
+            limit: 15,
+            sortby: [{ field: 'datetime', direction: 'asc' }],
+          }),
+          signal: controller.signal,
+        }).then((r) => (r.ok ? r.json() : { features: [] })),
+        fetch('https://planetarycomputer.microsoft.com/api/stac/v1/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...queryBody,
+            limit: 15,
+            sortby: [{ field: 'datetime', direction: 'desc' }],
+          }),
+          signal: controller.signal,
+        }).then((r) => (r.ok ? r.json() : { features: [] })),
+      ]);
       clearTimeout(timeoutId);
-      if (!resStac.ok) throw new Error(`STAC HTTP ${resStac.status}`);
-      const data = await resStac.json();
-      const features = Array.isArray(data?.features) ? data.features : [];
+
+      const featureMap = new Map<string, any>();
+      for (const f of [...(resAsc?.features || []), ...(resDesc?.features || [])]) {
+        if (f && f.id) featureMap.set(f.id, f);
+      }
+      const features = Array.from(featureMap.values());
+
       const mapped = features
         .map((feat: any, idx: number) => {
           const props = feat.properties || {};
           const cloudCover = typeof props['eo:cloud_cover'] === 'number' ? Math.round(props['eo:cloud_cover'] * 10) / 10 : 0;
           const datetime = props.datetime || props.start_datetime || '';
           const acquisitionDate = datetime ? datetime.split('T')[0] : '2023-01-01';
-          const satName = feat.id.startsWith('S2A') ? 'Sentinel-2A' : feat.id.startsWith('S2B') ? 'Sentinel-2B' : 'Sentinel-2';
+          const satName = feat.id.startsWith('S2A') ? 'Sentinel-2A' : feat.id.startsWith('S2B') ? 'Sentinel-2B' : feat.id.startsWith('S2C') ? 'Sentinel-2C' : 'Sentinel-2';
           const assets = feat.assets || {};
           let thumb = assets.rendered_preview?.href || assets.thumbnail?.href || assets.quicklook?.href || null;
           if (thumb && (thumb.endsWith('.tif') || thumb.endsWith('.tiff') || thumb.endsWith('.jp2'))) {
@@ -1065,9 +1087,8 @@ async function executeMultiSearch(
             relevanceScore: Math.max(10, Math.round(100 - cloudCover)),
           };
         })
-        .filter((s: any) => s.cloudCover <= maxCloudCover)
-        .sort((a: any, b: any) => a.cloudCover - b.cloudCover)
-        .slice(0, limit);
+        .filter((s: any) => s.cloudCover <= maxCloudCover + 15)
+        .sort((a: any, b: any) => a.acquisitionDate.localeCompare(b.acquisitionDate));
 
       if (mapped.length > 0) {
         const clouds = mapped.map((m: any) => m.cloudCover);
@@ -1082,8 +1103,8 @@ async function executeMultiSearch(
           message: `Successfully retrieved ${mapped.length} Sentinel-2 scenes.`,
         };
       }
-    } catch {
-      // Fallback to verified demonstration scenes
+    } catch (err: any) {
+      console.warn('Sentinel-2 STAC live fetch error:', err.message);
     }
 
     const demo = generateDemoScenes(bbox, startDate, endDate);
@@ -1099,32 +1120,53 @@ async function executeMultiSearch(
     };
   })();
 
-  // 2. Landsat: High-speed query to Planetary Computer Landsat C2 L2 STAC (~1.3s response)
+  // 2. Landsat: Planetary Computer Landsat C2 L2 STAC (Early + Late parallel query)
   const landsatPromise = (async () => {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2000);
-      const stacResponse = await fetch('https://planetarycomputer.microsoft.com/api/stac/v1/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          collections: ['landsat-c2-l2'],
-          bbox: bbox,
-          datetime: `${startIso}/${endIso}`,
-          limit: 25,
-        }),
-        signal: controller.signal,
-      });
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      const queryBody = {
+        collections: ['landsat-c2-l2'],
+        bbox: bbox,
+        datetime: `${startIso}/${endIso}`,
+        query: { 'eo:cloud_cover': { lt: Math.max(maxCloudCover, 30) } },
+      };
+
+      const [resAsc, resDesc] = await Promise.all([
+        fetch('https://planetarycomputer.microsoft.com/api/stac/v1/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...queryBody,
+            limit: 15,
+            sortby: [{ field: 'datetime', direction: 'asc' }],
+          }),
+          signal: controller.signal,
+        }).then((r) => (r.ok ? r.json() : { features: [] })),
+        fetch('https://planetarycomputer.microsoft.com/api/stac/v1/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...queryBody,
+            limit: 15,
+            sortby: [{ field: 'datetime', direction: 'desc' }],
+          }),
+          signal: controller.signal,
+        }).then((r) => (r.ok ? r.json() : { features: [] })),
+      ]);
       clearTimeout(timeoutId);
-      if (!stacResponse.ok) throw new Error(`Landsat STAC HTTP ${stacResponse.status}`);
-      const stacData = await stacResponse.json();
-      const features = stacData.features || [];
+
+      const featureMap = new Map<string, any>();
+      for (const f of [...(resAsc?.features || []), ...(resDesc?.features || [])]) {
+        if (f && f.id) featureMap.set(f.id, f);
+      }
+      const features = Array.from(featureMap.values());
+
       const mapped = features
         .filter((f: any) => {
           const cc = f.properties?.['eo:cloud_cover'];
-          return cc === undefined || cc <= maxCloudCover;
+          return cc === undefined || cc <= maxCloudCover + 15;
         })
-        .slice(0, limit)
         .map((f: any, idx: number) => {
           const cc = f.properties?.['eo:cloud_cover'] ?? 5.0;
           const isL9 = f.id.startsWith('LC09');
@@ -1137,10 +1179,11 @@ async function executeMultiSearch(
           if (!thumb) {
             thumb = getRealSatelliteImageUrl(f.bbox || bbox, 640, 440, idx);
           }
+          const dt = f.properties?.datetime || '';
           return {
             id: f.id,
-            datetime: f.properties?.datetime || `${startDate || '2023'}-06-15T05:14:17Z`,
-            acquisitionDate: f.properties?.datetime ? f.properties.datetime.slice(0, 10) : '2023-06-15',
+            datetime: dt,
+            acquisitionDate: dt ? dt.slice(0, 10) : '2023-06-15',
             satellite: satName,
             collection: 'landsat-c2-l2',
             cloudCover: Math.round(cc * 10) / 10,
@@ -1151,7 +1194,8 @@ async function executeMultiSearch(
             source: 'Google Earth Engine & USGS',
             relevanceScore: Math.max(10, Math.round(100 - cc)),
           };
-        });
+        })
+        .sort((a: any, b: any) => a.acquisitionDate.localeCompare(b.acquisitionDate));
 
       if (mapped.length > 0) {
         const clouds = mapped.map((m: any) => m.cloudCover);
@@ -1166,8 +1210,8 @@ async function executeMultiSearch(
           message: `Successfully retrieved ${mapped.length} Landsat scenes.`,
         };
       }
-    } catch {
-      // Fallback
+    } catch (err: any) {
+      console.warn('Landsat STAC live fetch error:', err.message);
     }
 
     return {

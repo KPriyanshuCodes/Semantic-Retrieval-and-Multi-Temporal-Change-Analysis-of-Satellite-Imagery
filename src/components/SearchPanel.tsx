@@ -420,7 +420,7 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
                 <span>Period</span>
               </div>
               <div className="text-xs font-bold text-slate-900">
-                {parsedData.startDate.slice(0, 4)} – {parsedData.endDate.slice(0, 4)}
+                {parsedData.startDate.slice(0, 10)} → {parsedData.endDate.slice(0, 10)}
               </div>
             </div>
 

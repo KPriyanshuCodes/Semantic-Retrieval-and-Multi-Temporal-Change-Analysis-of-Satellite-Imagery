@@ -169,11 +169,11 @@ export const HistoryPanel: React.FC = () => {
                 <div>
                   <div className="font-medium text-slate-900">"{s.query}"</div>
                   <div className="text-[11px] text-slate-600 mt-0.5">
-                    Parsed: {s.parsed.location} · {s.parsed.startDate} to {s.parsed.endDate} · {s.parsed.analysisType}
+                    Parsed: {s.parsed.location} · {s.parsed.startDate.slice(0, 10)} → {s.parsed.endDate.slice(0, 10)} · {s.parsed.analysisType}
                   </div>
                 </div>
                 <span className="text-[11px] font-mono text-slate-600 shrink-0">
-                  {new Date(s.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {new Date(s.timestamp).toISOString().slice(0, 10)}
                 </span>
               </div>
             ))}

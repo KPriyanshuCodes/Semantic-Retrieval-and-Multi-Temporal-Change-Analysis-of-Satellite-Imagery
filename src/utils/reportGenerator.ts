@@ -62,7 +62,7 @@ export function generateAnalysisPdf(analysis: AnalysisResult): void {
   doc.setFont('helvetica', 'bold');
   doc.text('Analysis Period:', col1, y + 13);
   doc.setFont('helvetica', 'normal');
-  doc.text(`${analysis.beforeScene.date} -> ${analysis.afterScene.date}`, col1 + 30, y + 13);
+  doc.text(`${analysis.beforeScene.date.slice(0, 10)} -> ${analysis.afterScene.date.slice(0, 10)}`, col1 + 30, y + 13);
 
   doc.setFont('helvetica', 'bold');
   doc.text('Area of Interest (AOI):', col1, y + 20);
@@ -222,7 +222,7 @@ export function generateAnalysisPdf(analysis: AnalysisResult): void {
   doc.setFont('helvetica', 'bold');
   doc.text('Baseline Observation (T1):', margin + 4, y + 6);
   doc.setFont('helvetica', 'normal');
-  doc.text(`Date: ${analysis.beforeScene.date}`, margin + 50, y + 6);
+  doc.text(`Date: ${analysis.beforeScene.date.slice(0, 10)}`, margin + 50, y + 6);
   doc.text(`Cloud Cover: ${analysis.beforeScene.cloudCover}%`, margin + 85, y + 6);
   doc.text(`Platform: ${analysis.beforeScene.satellite}`, margin + 125, y + 6);
 
@@ -237,7 +237,7 @@ export function generateAnalysisPdf(analysis: AnalysisResult): void {
   doc.setFont('helvetica', 'bold');
   doc.text('Comparison Observation (T2):', margin + 4, y + 19);
   doc.setFont('helvetica', 'normal');
-  doc.text(`Date: ${analysis.afterScene.date}`, margin + 50, y + 19);
+  doc.text(`Date: ${analysis.afterScene.date.slice(0, 10)}`, margin + 50, y + 19);
   doc.text(`Cloud Cover: ${analysis.afterScene.cloudCover}%`, margin + 85, y + 19);
   doc.text(`Platform: ${analysis.afterScene.satellite}`, margin + 125, y + 19);
 

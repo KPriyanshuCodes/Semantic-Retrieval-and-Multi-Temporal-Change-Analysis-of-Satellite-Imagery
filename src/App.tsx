@@ -9,6 +9,12 @@ import { PrivacyModals } from './components/PrivacyModals';
 import { CookieBanner } from './components/CookieBanner';
 import { SemanticParsedQuery, GeocodeResult, SatelliteScene, AnalysisResult, CookiePreferences } from './types';
 import { computeClientAnalysis } from './utils/clientFallbackSearch';
+import {
+  recommendSatellitePair,
+  validatePairSelection,
+  RecommendationResult,
+  SelectionValidation,
+} from './utils/sceneRecommendation';
 import { ShieldCheck, Compass, Database, Layers, ExternalLink, Satellite } from 'lucide-react';
 
 export default function App() {
@@ -26,6 +32,8 @@ export default function App() {
   // Selection & Analysis State
   const [beforeScene, setBeforeScene] = useState<SatelliteScene | null>(null);
   const [afterScene, setAfterScene] = useState<SatelliteScene | null>(null);
+  const [recommendation, setRecommendation] = useState<RecommendationResult | null>(null);
+  const [selectionValidation, setSelectionValidation] = useState<SelectionValidation>({ valid: true });
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisStep, setAnalysisStep] = useState(1);
@@ -87,22 +95,22 @@ export default function App() {
       setScenes(allScenes);
       setActiveSourceFilter('all');
 
-      // Auto-preselect sensible Before and After
-      if (s2Scenes.length >= 2) {
-        setBeforeScene(s2Scenes[0]);
-        setAfterScene(s2Scenes[s2Scenes.length - 1]);
-      } else if (s2Scenes.length === 1) {
-        setBeforeScene(s2Scenes[0]);
-        setAfterScene(null);
-      } else if (landsatScenes.length >= 2) {
-        setBeforeScene(landsatScenes[0]);
-        setAfterScene(landsatScenes[landsatScenes.length - 1]);
-      } else if (landsatScenes.length === 1) {
-        setBeforeScene(landsatScenes[0]);
-        setAfterScene(null);
-      }
+      // Proper Chronological and Data-Quality-Based Recommendation
+      const rec = recommendSatellitePair(
+        allScenes,
+        parsed.startDate,
+        parsed.endDate,
+        geocode.bbox
+      );
 
-      setDataModeNotice('Parallel multi-source search complete. Review available satellite data below.');
+      setRecommendation(rec);
+      setBeforeScene(rec.beforeScene);
+      setAfterScene(rec.afterScene);
+
+      const val = validatePairSelection(rec.beforeScene, rec.afterScene, geocode.bbox);
+      setSelectionValidation(val);
+
+      setDataModeNotice('Satellite search complete. Review optimal chronological recommendations below.');
       setActiveTab('catalog');
     } catch (err: any) {
       console.error('Multi-source search failed:', err);
@@ -112,9 +120,22 @@ export default function App() {
     }
   };
 
+  // User Manual Selection Handlers with Validation
+  const handleSelectBefore = (scene: SatelliteScene) => {
+    setBeforeScene(scene);
+    const val = validatePairSelection(scene, afterScene, geocodeData?.bbox);
+    setSelectionValidation(val);
+  };
+
+  const handleSelectAfter = (scene: SatelliteScene) => {
+    setAfterScene(scene);
+    const val = validatePairSelection(beforeScene, scene, geocodeData?.bbox);
+    setSelectionValidation(val);
+  };
+
   // Run Multi-temporal Analysis
   const handleRunAnalysis = async () => {
-    if (!beforeScene || !afterScene) return;
+    if (!beforeScene || !afterScene || !selectionValidation.valid) return;
 
     setIsAnalyzing(true);
     setAnalysisError(null);
@@ -260,15 +281,15 @@ export default function App() {
               {/* Left Column: Scene List */}
               <div className="lg:col-span-7 space-y-4">
                 <SceneList
-                  scenes={scenes.filter((s) => {
-                    if (activeSourceFilter === 'sentinel2') return s.collection === 'sentinel-2-l2a';
-                    if (activeSourceFilter === 'landsat') return s.collection === 'landsat-c2-l2';
-                    return true;
-                  })}
+                  scenes={scenes}
                   beforeScene={beforeScene}
                   afterScene={afterScene}
-                  onSelectBefore={setBeforeScene}
-                  onSelectAfter={setAfterScene}
+                  onSelectBefore={handleSelectBefore}
+                  onSelectAfter={handleSelectAfter}
+                  recommendation={recommendation}
+                  selectionValidation={selectionValidation}
+                  requestedStartDate={parsedQuery?.startDate || '2020-01-01'}
+                  requestedEndDate={parsedQuery?.endDate || '2026-12-31'}
                   onFocusScene={(scene) => {
                     if (geocodeData) {
                       setGeocodeData({ ...geocodeData, bbox: scene.bbox });

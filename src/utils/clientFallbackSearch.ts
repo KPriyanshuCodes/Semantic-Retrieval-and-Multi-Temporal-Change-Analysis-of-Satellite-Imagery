@@ -216,7 +216,7 @@ export function generateClientDemoScenes(
   endDate?: string
 ) {
   const startYear = startDate ? parseInt(startDate.slice(0, 4), 10) : 2020;
-  const endYear = endDate ? parseInt(endDate.slice(0, 4), 10) : 2024;
+  const endYear = endDate ? parseInt(endDate.slice(0, 4), 10) : 2026;
   const [minLon, minLat, maxLon, maxLat] = bbox;
   const centerLon = (minLon + maxLon) / 2;
   const centerLat = (minLat + maxLat) / 2;

@@ -7,8 +7,6 @@ import {
   Satellite,
   FileText,
   FileSpreadsheet,
-  ChevronDown,
-  ChevronUp,
   Activity,
   AlertTriangle,
   ArrowLeft,
@@ -39,7 +37,6 @@ export const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({
 }) => {
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [downloadingCsv, setDownloadingCsv] = useState(false);
-  const [showTechnicalDetails, setShowTechnicalDetails] = useState(false);
 
   // 1. Loading State
   if (isAnalyzing) {
@@ -165,6 +162,10 @@ export const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({
       ? 'Water Surface Dynamics'
       : 'General Land Cover Change';
 
+  // Format dates strictly to ISO 8601 (YYYY-MM-DD)
+  const beforeDateIso = (beforeScene.date || '').slice(0, 10);
+  const afterDateIso = (afterScene.date || '').slice(0, 10);
+
   // Determine satellite and source used
   const satelliteUsed = afterScene.satellite || beforeScene.satellite || 'Sentinel-2';
   const sourceUsed =
@@ -185,7 +186,7 @@ export const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({
               </h2>
             </div>
             <p className="text-xs text-slate-500">
-              Multi-temporal comparison between {beforeScene.date} and {afterScene.date}.
+              Multi-temporal comparison between {beforeDateIso} and {afterDateIso}.
             </p>
           </div>
 
@@ -215,6 +216,13 @@ export const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({
               <FileSpreadsheet className="w-3.5 h-3.5" />
               <span>CSV Data</span>
             </button>
+            <button
+              onClick={handleDownloadGeoJson}
+              className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded transition-colors flex items-center gap-1"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>GeoJSON</span>
+            </button>
           </div>
         </div>
 
@@ -236,7 +244,7 @@ export const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({
               <span>Analysis Period</span>
             </div>
             <div className="text-xs font-bold text-slate-900">
-              {beforeScene.date} → {afterScene.date}
+              {beforeDateIso} → {afterDateIso}
             </div>
           </div>
 
@@ -325,12 +333,12 @@ export const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({
           <div className="border border-slate-200 rounded-lg overflow-hidden bg-slate-950 flex flex-col">
             <div className="p-2.5 bg-slate-900 text-white flex items-center justify-between text-xs">
               <span className="font-bold">Before Image</span>
-              <span className="text-slate-300 font-mono text-[11px]">{beforeScene.date}</span>
+              <span className="text-slate-300 font-mono text-[11px]">{beforeDateIso}</span>
             </div>
             <div className="relative aspect-16/10 bg-slate-900 flex items-center justify-center">
               <img
                 src={beforeScene.thumbnailUrl || getRealSatelliteImageUrl(beforeScene.bbox || analysis.aoi, 640, 440, 0)}
-                alt={`Before observation on ${beforeScene.date}`}
+                alt={`Before observation on ${beforeDateIso}`}
                 className="w-full h-full object-cover"
                 onError={(e) => {
                   const target = e.target as HTMLImageElement;
@@ -349,12 +357,12 @@ export const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({
           <div className="border border-slate-200 rounded-lg overflow-hidden bg-slate-950 flex flex-col">
             <div className="p-2.5 bg-slate-900 text-white flex items-center justify-between text-xs">
               <span className="font-bold">After Image</span>
-              <span className="text-slate-300 font-mono text-[11px]">{afterScene.date}</span>
+              <span className="text-slate-300 font-mono text-[11px]">{afterDateIso}</span>
             </div>
             <div className="relative aspect-16/10 bg-slate-900 flex items-center justify-center">
               <img
                 src={afterScene.thumbnailUrl || getRealSatelliteImageUrl(afterScene.bbox || analysis.aoi, 640, 440, 1)}
-                alt={`After observation on ${afterScene.date}`}
+                alt={`After observation on ${afterDateIso}`}
                 className="w-full h-full object-cover"
                 onError={(e) => {
                   const target = e.target as HTMLImageElement;
@@ -386,64 +394,6 @@ export const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({
         {summary && (
           <div className="p-3 bg-slate-50 rounded border border-slate-200/80 text-xs text-slate-700 leading-relaxed">
             <strong>Key Finding:</strong> {summary}
-          </div>
-        )}
-      </div>
-
-      {/* 5. Optional Technical Details Section (Collapsed by default) */}
-      <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-xs">
-        <button
-          type="button"
-          onClick={() => setShowTechnicalDetails(!showTechnicalDetails)}
-          className="w-full flex items-center justify-between text-xs font-semibold text-slate-700 hover:text-slate-900"
-        >
-          <span>Technical Details & Metadata</span>
-          {showTechnicalDetails ? (
-            <ChevronUp className="w-4 h-4 text-slate-500" />
-          ) : (
-            <ChevronDown className="w-4 h-4 text-slate-500" />
-          )}
-        </button>
-
-        {showTechnicalDetails && (
-          <div className="mt-4 pt-4 border-t border-slate-100 text-xs space-y-3 text-slate-600">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="p-2.5 bg-slate-50 rounded border border-slate-100 space-y-1">
-                <div className="font-semibold text-slate-900">Before Scene Information</div>
-                <div className="font-mono text-[11px] truncate">ID: {beforeScene.id}</div>
-                <div>Collection: {beforeScene.collection || 'sentinel-2-l2a'}</div>
-                <div>Source: {beforeScene.source || sourceUsed}</div>
-              </div>
-
-              <div className="p-2.5 bg-slate-50 rounded border border-slate-100 space-y-1">
-                <div className="font-semibold text-slate-900">After Scene Information</div>
-                <div className="font-mono text-[11px] truncate">ID: {afterScene.id}</div>
-                <div>Collection: {afterScene.collection || 'sentinel-2-l2a'}</div>
-                <div>Source: {afterScene.source || sourceUsed}</div>
-              </div>
-            </div>
-
-            <div className="p-2.5 bg-slate-50 rounded border border-slate-100 space-y-1">
-              <div>
-                <strong>Spectral Difference Method:</strong> {metrics.method}
-              </div>
-              <div>
-                <strong>Index Formula:</strong> {metrics.indexUsed}
-              </div>
-              <div>
-                <strong>Scene Overlap:</strong> {metrics.overlapPercentage}%
-              </div>
-            </div>
-
-            <div className="flex justify-end pt-1">
-              <button
-                onClick={handleDownloadGeoJson}
-                className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded transition-colors flex items-center gap-1.5"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>Export Vector GeoJSON</span>
-              </button>
-            </div>
           </div>
         )}
       </div>

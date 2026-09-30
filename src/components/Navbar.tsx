@@ -1,12 +1,12 @@
 import React from 'react';
-import { Layers, ShieldCheck, Database, History, Compass, Info } from 'lucide-react';
+import { Layers, Database, History, Compass } from 'lucide-react';
 
 interface NavbarProps {
   activeTab: 'explore' | 'catalog' | 'analysis' | 'history' | 'privacy';
   setActiveTab: (tab: 'explore' | 'catalog' | 'analysis' | 'history' | 'privacy') => void;
   isDemoMode: boolean;
   setIsDemoMode: (val: boolean) => void;
-  openPrivacyModal: (section: 'privacy' | 'terms' | 'cookies' | 'rights') => void;
+  openPrivacyModal?: (section: 'privacy' | 'terms' | 'cookies' | 'rights') => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -89,18 +89,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             <History className="w-4 h-4 text-slate-500" />
             <span>History</span>
           </button>
-
-          <button
-            onClick={() => setActiveTab('privacy')}
-            className={`px-3 py-1.5 rounded transition-colors whitespace-nowrap flex items-center gap-1.5 ${
-              activeTab === 'privacy'
-                ? 'bg-slate-100 text-slate-950 font-semibold'
-                : 'hover:text-slate-950 hover:bg-slate-50'
-            }`}
-          >
-            <ShieldCheck className="w-4 h-4 text-slate-500" />
-            <span>Privacy</span>
-          </button>
         </nav>
 
         {/* Zone 3: Primary Actions & Data Mode Indicator */}
@@ -130,15 +118,6 @@ export const Navbar: React.FC<NavbarProps> = ({
               DEMO DATA
             </span>
           </div>
-
-          <button
-            onClick={() => openPrivacyModal('privacy')}
-            className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded transition-colors"
-            title="Privacy Policy, Data Rights & Third Parties"
-            aria-label="Privacy Information"
-          >
-            <Info className="w-5 h-5" />
-          </button>
         </div>
       </div>
     </header>

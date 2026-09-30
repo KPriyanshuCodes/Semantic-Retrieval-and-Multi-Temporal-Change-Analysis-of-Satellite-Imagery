@@ -347,7 +347,7 @@ export const GeospatialMap: React.FC<GeospatialMapProps> = ({
           }`}
           aria-label="View Earlier Observation"
         >
-          <span>Before ({beforeScene?.acquisitionDate || 'T1'})</span>
+          <span>Before ({beforeScene?.acquisitionDate?.slice(0, 10) || 'T1'})</span>
         </button>
         <button
           onClick={() => setVisualizationMode('after')}
@@ -358,7 +358,7 @@ export const GeospatialMap: React.FC<GeospatialMapProps> = ({
           }`}
           aria-label="View Later Observation"
         >
-          <span>After ({afterScene?.acquisitionDate || 'T2'})</span>
+          <span>After ({afterScene?.acquisitionDate?.slice(0, 10) || 'T2'})</span>
         </button>
         <button
           onClick={() => setVisualizationMode('swipe')}
@@ -415,7 +415,7 @@ export const GeospatialMap: React.FC<GeospatialMapProps> = ({
               <div className="absolute top-16 left-4 bg-slate-950/85 text-white p-2.5 rounded backdrop-blur-xs text-xs space-y-0.5 border border-white/20">
                 <div className="font-bold flex items-center gap-1.5 text-emerald-400">
                   <Calendar className="w-3.5 h-3.5" />
-                  <span>BEFORE: {beforeScene?.acquisitionDate || 'T1'}</span>
+                  <span>BEFORE: {beforeScene?.acquisitionDate?.slice(0, 10) || 'T1'}</span>
                 </div>
                 <div className="text-[11px] text-slate-300 font-mono">
                   Cloud: {beforeScene?.cloudCover || 0}% · {beforeScene?.satellite || 'Sentinel-2'}
@@ -429,7 +429,7 @@ export const GeospatialMap: React.FC<GeospatialMapProps> = ({
             {afterScene ? (
               <img
                 src={afterScene.thumbnailUrl || getRealSatelliteImageUrl(afterScene.bbox || aoiBbox || [77.2, 23.1, 77.5, 23.4], 800, 600, 1)}
-                alt={`After scene acquired ${afterScene.acquisitionDate}`}
+                alt={`After scene acquired ${afterScene.acquisitionDate?.slice(0, 10)}`}
                 className="w-full h-full object-cover"
                 onError={(e) => {
                   const target = e.target as HTMLImageElement;
@@ -446,7 +446,7 @@ export const GeospatialMap: React.FC<GeospatialMapProps> = ({
             {/* Badge */}
             <div className="absolute top-16 right-4 bg-slate-950/85 text-white p-2.5 rounded backdrop-blur-xs text-xs space-y-0.5 border border-white/20 text-right">
               <div className="font-bold flex items-center justify-end gap-1.5 text-cyan-400">
-                <span>AFTER: {afterScene?.acquisitionDate || 'T2'}</span>
+                <span>AFTER: {afterScene?.acquisitionDate?.slice(0, 10) || 'T2'}</span>
                 <Calendar className="w-3.5 h-3.5" />
               </div>
               <div className="text-[11px] text-slate-300 font-mono">
@@ -507,7 +507,7 @@ export const GeospatialMap: React.FC<GeospatialMapProps> = ({
           <Calendar className="w-3.5 h-3.5 text-emerald-400" />
           <span>
             Displaying Baseline Observation (T1):{' '}
-            <strong>{beforeScene.acquisitionDate}</strong> ({beforeScene.satellite} · Cloud:{' '}
+            <strong>{beforeScene.acquisitionDate?.slice(0, 10)}</strong> ({beforeScene.satellite} · Cloud:{' '}
             {beforeScene.cloudCover}%)
           </span>
         </div>
@@ -518,7 +518,7 @@ export const GeospatialMap: React.FC<GeospatialMapProps> = ({
           <Calendar className="w-3.5 h-3.5 text-cyan-400" />
           <span>
             Displaying Comparison Observation (T2):{' '}
-            <strong>{afterScene.acquisitionDate}</strong> ({afterScene.satellite} · Cloud:{' '}
+            <strong>{afterScene.acquisitionDate?.slice(0, 10)}</strong> ({afterScene.satellite} · Cloud:{' '}
             {afterScene.cloudCover}%)
           </span>
         </div>
