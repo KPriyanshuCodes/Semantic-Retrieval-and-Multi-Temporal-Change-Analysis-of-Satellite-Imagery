@@ -101,39 +101,54 @@ export function parseQueryClientSide(query: string): SemanticParsedQuery {
     }
   }
 
-  if (!location) {
-    location = 'Bhopal';
-  }
+  // DO NOT HARDCODE OR DEFAULT TO BHOPAL OR ANY LOCATION
+  const needsClarification = !location;
 
   return {
-    location,
+    location: location || '',
     startDate,
     endDate,
     analysisType,
     maxCloudCover: 35,
     satellite: 'Sentinel-2',
     collection: 'sentinel-2-l2a',
-    confidence: 0.9,
-    needsClarification: false,
+    confidence: location ? 0.9 : 0.2,
+    needsClarification,
+    clarificationPrompt: needsClarification
+      ? 'Please specify a geographical location (e.g. Bhopal, Delhi, Mumbai, Bengaluru).'
+      : undefined,
     method: 'Local Fast Intent Parser',
   };
 }
 
 export function resolveGeocodeClientSide(place: string): GeocodeResult {
-  const cleanPlace = place.toLowerCase().trim();
+  const cleanPlace = (place || '').toLowerCase().trim();
+  if (!cleanPlace) {
+    return {
+      found: false,
+      place: '',
+      displayName: '',
+      lat: 0,
+      lon: 0,
+      bbox: [0, 0, 0, 0],
+      error: 'Please enter a location.',
+      candidates: [],
+    };
+  }
+
   const match = CLIENT_PRESEEDED_GEOCODES[cleanPlace];
 
   if (match) {
     return {
       found: true,
-      place: place.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+      place: cleanPlace.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
       displayName: match.displayName,
       lat: match.lat,
       lon: match.lon,
       bbox: match.bbox,
       attribution: 'OpenStreetMap contributors',
       candidates: [{
-        place,
+        place: cleanPlace,
         displayName: match.displayName,
         lat: match.lat,
         lon: match.lon,
@@ -148,14 +163,14 @@ export function resolveGeocodeClientSide(place: string): GeocodeResult {
     if (cleanPlace.includes(key) || key.includes(cleanPlace)) {
       return {
         found: true,
-        place: place.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+        place: cleanPlace.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
         displayName: p.displayName,
         lat: p.lat,
         lon: p.lon,
         bbox: p.bbox,
         attribution: 'OpenStreetMap contributors',
         candidates: [{
-          place,
+          place: cleanPlace,
           displayName: p.displayName,
           lat: p.lat,
           lon: p.lon,
@@ -166,24 +181,16 @@ export function resolveGeocodeClientSide(place: string): GeocodeResult {
     }
   }
 
-  // Default coordinate if place not found
-  const defaultBbox: [number, number, number, number] = [77.24, 23.09, 77.56, 23.41];
+  // If place not found, DO NOT default to Bhopal coordinates! Return found: false
   return {
-    found: true,
+    found: false,
     place,
-    displayName: `${place}, AOI Region`,
-    lat: 23.2599,
-    lon: 77.4126,
-    bbox: defaultBbox,
-    attribution: 'Local Spatial Catalog',
-    candidates: [{
-      place,
-      displayName: `${place}, AOI Region`,
-      lat: 23.2599,
-      lon: 77.4126,
-      bbox: defaultBbox,
-      importance: 0.8,
-    }],
+    displayName: place,
+    lat: 0,
+    lon: 0,
+    bbox: [0, 0, 0, 0],
+    error: `Could not find coordinates for "${place}". Please check the spelling or specify another city or region.`,
+    candidates: [],
   };
 }
 
@@ -335,11 +342,39 @@ export async function executeClientFallbackSearch(
   endDate?: string
 ) {
   const parsed = parseQueryClientSide(query);
-  if (customLocation) parsed.location = customLocation;
+  if (customLocation) {
+    parsed.location = customLocation;
+    parsed.needsClarification = false;
+  }
   if (startDate) parsed.startDate = startDate;
   if (endDate) parsed.endDate = endDate;
 
+  if (!parsed.location || !parsed.location.trim()) {
+    return {
+      parsed,
+      geocode: {
+        found: false,
+        place: '',
+        displayName: '',
+        lat: 0,
+        lon: 0,
+        bbox: [0, 0, 0, 0] as [number, number, number, number],
+        error: 'Please specify a geographical location.',
+        candidates: [],
+      },
+      multiResult: null,
+    };
+  }
+
   const geocode = resolveGeocodeClientSide(parsed.location);
+  if (!geocode.found) {
+    return {
+      parsed,
+      geocode,
+      multiResult: null,
+    };
+  }
+
   const multiResult = generateClientDemoScenes(geocode.bbox, parsed.startDate, parsed.endDate);
 
   return {

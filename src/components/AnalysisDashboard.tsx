@@ -14,6 +14,7 @@ import {
   ArrowLeft,
 } from 'lucide-react';
 import { generateAnalysisPdf, generateAnalysisCsv } from '../utils/reportGenerator';
+import { getRealSatelliteImageUrl } from '../utils/clientFallbackSearch';
 
 interface AnalysisDashboardProps {
   analysis: AnalysisResult | null;
@@ -327,23 +328,16 @@ export const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({
               <span className="text-slate-300 font-mono text-[11px]">{beforeScene.date}</span>
             </div>
             <div className="relative aspect-16/10 bg-slate-900 flex items-center justify-center">
-              {beforeScene.thumbnailUrl ? (
-                <img
-                  src={beforeScene.thumbnailUrl}
-                  alt={`Before observation on ${beforeScene.date}`}
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement;
-                    target.onerror = null;
-                    target.src = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=77.3,23.1,77.5,23.3&bboxSR=4326&imageSR=4326&size=640,440&format=jpg&f=image';
-                  }}
-                />
-              ) : (
-                <div className="text-center text-slate-400 p-4">
-                  <Satellite className="w-8 h-8 mx-auto mb-1 text-slate-600" />
-                  <span className="text-xs">Baseline Satellite Image</span>
-                </div>
-              )}
+              <img
+                src={beforeScene.thumbnailUrl || getRealSatelliteImageUrl(beforeScene.bbox || analysis.aoi, 640, 440, 0)}
+                alt={`Before observation on ${beforeScene.date}`}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  target.onerror = null;
+                  target.src = getRealSatelliteImageUrl(beforeScene.bbox || analysis.aoi, 640, 440, 0);
+                }}
+              />
             </div>
             <div className="p-2 bg-slate-50 text-[11px] text-slate-600 flex items-center justify-between border-t border-slate-200">
               <span>{beforeScene.satellite}</span>
@@ -358,23 +352,16 @@ export const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({
               <span className="text-slate-300 font-mono text-[11px]">{afterScene.date}</span>
             </div>
             <div className="relative aspect-16/10 bg-slate-900 flex items-center justify-center">
-              {afterScene.thumbnailUrl ? (
-                <img
-                  src={afterScene.thumbnailUrl}
-                  alt={`After observation on ${afterScene.date}`}
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement;
-                    target.onerror = null;
-                    target.src = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=77.3,23.1,77.5,23.3&bboxSR=4326&imageSR=4326&size=640,440&format=jpg&f=image';
-                  }}
-                />
-              ) : (
-                <div className="text-center text-slate-400 p-4">
-                  <Satellite className="w-8 h-8 mx-auto mb-1 text-slate-600" />
-                  <span className="text-xs">Comparison Satellite Image</span>
-                </div>
-              )}
+              <img
+                src={afterScene.thumbnailUrl || getRealSatelliteImageUrl(afterScene.bbox || analysis.aoi, 640, 440, 1)}
+                alt={`After observation on ${afterScene.date}`}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  target.onerror = null;
+                  target.src = getRealSatelliteImageUrl(afterScene.bbox || analysis.aoi, 640, 440, 1);
+                }}
+              />
             </div>
             <div className="p-2 bg-slate-50 text-[11px] text-slate-600 flex items-center justify-between border-t border-slate-200">
               <span>{afterScene.satellite}</span>

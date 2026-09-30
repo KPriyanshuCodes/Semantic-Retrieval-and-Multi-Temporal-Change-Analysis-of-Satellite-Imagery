@@ -10,6 +10,7 @@ import {
   RotateCcw,
   Check,
 } from 'lucide-react';
+import { getRealSatelliteImageUrl } from '../utils/clientFallbackSearch';
 
 interface SceneListProps {
   scenes: SatelliteScene[];
@@ -55,6 +56,7 @@ export const SceneList: React.FC<SceneListProps> = ({
 
   // Empty State
   if (scenes.length === 0) {
+    const hasSearch = Boolean(locationName && locationName !== 'Selected Region');
     return (
       <div className="bg-white rounded-lg border border-slate-200 p-8 text-center space-y-4 shadow-xs">
         <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-500">
@@ -62,10 +64,12 @@ export const SceneList: React.FC<SceneListProps> = ({
         </div>
         <div className="space-y-1">
           <h3 className="text-base font-bold text-slate-900">
-            No clear satellite imagery found
+            {hasSearch ? 'No suitable satellite imagery found' : 'No Satellite Search Submitted Yet'}
           </h3>
           <p className="text-xs text-slate-600 max-w-md mx-auto">
-            No cloud-screened images are currently available for <strong>{locationName}</strong> in the requested time frame.
+            {hasSearch
+              ? `No suitable satellite imagery was found for ${locationName} in the requested time frame.`
+              : 'Enter a search query in the Search tab to discover Sentinel-2 and Landsat observations.'}
           </p>
         </div>
 
@@ -213,15 +217,15 @@ export const SceneList: React.FC<SceneListProps> = ({
                   : 'bg-slate-800/40 border-dashed border-slate-700 text-slate-400'
               }`}
             >
-              {beforeScene?.thumbnailUrl ? (
+              {beforeScene ? (
                 <img
-                  src={beforeScene.thumbnailUrl}
+                  src={beforeScene.thumbnailUrl || getRealSatelliteImageUrl(beforeScene.bbox, 640, 440, 0)}
                   alt="Before observation"
                   className="w-12 h-12 rounded object-cover shrink-0 bg-slate-950"
                   onError={(e) => {
                     const target = e.target as HTMLImageElement;
                     target.onerror = null;
-                    target.src = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=77.3,23.1,77.5,23.3&bboxSR=4326&imageSR=4326&size=640,440&format=jpg&f=image';
+                    target.src = getRealSatelliteImageUrl(beforeScene.bbox, 640, 440, 0);
                   }}
                 />
               ) : (
@@ -256,15 +260,15 @@ export const SceneList: React.FC<SceneListProps> = ({
                   : 'bg-slate-800/40 border-dashed border-slate-700 text-slate-400'
               }`}
             >
-              {afterScene?.thumbnailUrl ? (
+              {afterScene ? (
                 <img
-                  src={afterScene.thumbnailUrl}
+                  src={afterScene.thumbnailUrl || getRealSatelliteImageUrl(afterScene.bbox, 640, 440, 1)}
                   alt="After observation"
                   className="w-12 h-12 rounded object-cover shrink-0 bg-slate-950"
                   onError={(e) => {
                     const target = e.target as HTMLImageElement;
                     target.onerror = null;
-                    target.src = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=77.3,23.1,77.5,23.3&bboxSR=4326&imageSR=4326&size=640,440&format=jpg&f=image';
+                    target.src = getRealSatelliteImageUrl(afterScene.bbox, 640, 440, 1);
                   }}
                 />
               ) : (
@@ -328,24 +332,17 @@ export const SceneList: React.FC<SceneListProps> = ({
             >
               {/* Image Preview */}
               <div className="relative aspect-16/10 bg-slate-900 overflow-hidden flex items-center justify-center">
-                {scene.thumbnailUrl ? (
-                  <img
-                    src={scene.thumbnailUrl}
-                    alt={`${scene.satellite} acquired on ${scene.acquisitionDate}`}
-                    className="w-full h-full object-cover"
-                    loading="lazy"
-                    onError={(e) => {
-                      const target = e.target as HTMLImageElement;
-                      target.onerror = null;
-                      target.src = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=77.3,23.1,77.5,23.3&bboxSR=4326&imageSR=4326&size=640,440&format=jpg&f=image';
-                    }}
-                  />
-                ) : (
-                  <div className="text-center p-4 text-slate-500">
-                    <Satellite className="w-8 h-8 mx-auto mb-1 text-slate-600" />
-                    <span className="text-[11px]">Satellite Imagery</span>
-                  </div>
-                )}
+                <img
+                  src={scene.thumbnailUrl || getRealSatelliteImageUrl(scene.bbox, 640, 440, 0)}
+                  alt={`${scene.satellite} acquired on ${scene.acquisitionDate}`}
+                  className="w-full h-full object-cover"
+                  loading="lazy"
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    target.onerror = null;
+                    target.src = getRealSatelliteImageUrl(scene.bbox, 640, 440, 0);
+                  }}
+                />
 
                 {/* Cloud & Date HUD Badges */}
                 <div className="absolute top-2 left-2 bg-slate-950/80 backdrop-blur-xs text-white px-2 py-0.5 rounded text-[10px] font-medium flex items-center gap-1">

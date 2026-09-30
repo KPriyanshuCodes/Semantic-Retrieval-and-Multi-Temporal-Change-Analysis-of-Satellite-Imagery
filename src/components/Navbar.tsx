@@ -33,9 +33,6 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span className="text-lg font-bold tracking-tight text-slate-900 group-hover:text-cyan-700 transition-colors">
                 GeoSemantic
               </span>
-              <span className="hidden sm:inline-block ml-2 text-[11px] text-slate-600 uppercase tracking-wider font-mono">
-                Sentinel-2 Change Analysis
-              </span>
             </div>
           </button>
         </div>

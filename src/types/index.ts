@@ -31,7 +31,7 @@ export interface GeocodeResult {
   lat: number;
   lon: number;
   bbox: [number, number, number, number]; // [minLon, minLat, maxLon, maxLat]
-  attribution: string;
+  attribution?: string;
   candidates?: GeocodeCandidate[];
   error?: string;
 }

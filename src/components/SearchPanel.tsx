@@ -37,7 +37,7 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
   isSearching,
   searchStatusMessage,
 }) => {
-  const [queryText, setQueryText] = useState('Show forest changes in Bhopal between 2020 and 2026');
+  const [queryText, setQueryText] = useState('');
   const [parsedData, setParsedData] = useState<SemanticParsedQuery | null>(null);
   const [geocodeData, setGeocodeData] = useState<GeocodeResult | null>(null);
   const [selectedCandidate, setSelectedCandidate] = useState<GeocodeCandidate | null>(null);
@@ -56,8 +56,14 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
 
   const handleRunSearch = async (e?: React.FormEvent, customQuery?: string) => {
     if (e) e.preventDefault();
-    const query = customQuery || queryText;
-    if (!query.trim()) return;
+    const query = (customQuery !== undefined ? customQuery : queryText).trim();
+    if (!query) {
+      setErrorMessage('Please enter a location or analysis query.');
+      setParsedData(null);
+      setGeocodeData(null);
+      setAwaitingLocationInput(false);
+      return;
+    }
 
     setErrorMessage(null);
     setAwaitingLocationInput(false);
@@ -115,15 +121,27 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
 
       onSearchComplete(parsed, data.geocode, data.multiResult);
     } catch (err: any) {
-      // Final catch: ensure fallback always displays results
+      // Final catch: ensure fallback always displays results or prompts location
       try {
         const fallback = await executeClientFallbackSearch(query);
-        setParsedData(fallback.parsed);
+        if (fallback.parsed) setParsedData(fallback.parsed);
+        if (!fallback.parsed?.location || !fallback.parsed.location.trim()) {
+          setAwaitingLocationInput(true);
+          setErrorMessage('Please specify the city or region you want to analyze.');
+          return;
+        }
+        if (!fallback.geocode?.found) {
+          setAwaitingLocationInput(true);
+          setErrorMessage(
+            fallback.geocode?.error || `Could not find coordinates for "${fallback.parsed.location}". Please check spelling.`
+          );
+          return;
+        }
         setGeocodeData(fallback.geocode);
         onSearchComplete(fallback.parsed, fallback.geocode, fallback.multiResult);
       } catch {
         setErrorMessage(
-          err.message || 'Error searching satellite data. Please verify your query or location.'
+          err?.message || 'Error searching satellite data. Please verify your query or location.'
         );
       }
     }
@@ -250,30 +268,34 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
       {/* Primary Query Card */}
       <div className="bg-white rounded-lg border border-slate-200 p-6 shadow-xs">
         <div className="max-w-3xl">
-          <h1 className="text-xl font-bold tracking-tight text-slate-900 mb-1">
+          <h1 className="text-xl font-bold tracking-tight text-slate-900 mb-4">
             Search Satellite Imagery
           </h1>
-          <p className="text-xs text-slate-600 mb-4">
-            Enter what you want to analyze. The system automatically searches both{' '}
-            <strong className="text-slate-800">Copernicus (Sentinel-2)</strong> and{' '}
-            <strong className="text-slate-800">Google Earth Engine (Landsat)</strong> to find clear observation dates.
-          </p>
 
           <form onSubmit={handleRunSearch} className="space-y-3">
             <div className="relative flex items-center">
               <input
                 type="text"
                 value={queryText}
-                onChange={(e) => setQueryText(e.target.value)}
-                placeholder="e.g. Show forest changes in Bhopal between 2020 and 2026"
-                className="w-full pl-10 pr-32 py-3 text-sm rounded-md border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent text-slate-900 placeholder:text-slate-400"
+                onChange={(e) => {
+                  setQueryText(e.target.value);
+                  if (errorMessage) setErrorMessage(null);
+                }}
+                placeholder="Search satellite imagery by location, theme, or date range..."
+                className={`w-full pl-10 pr-32 py-3 text-sm rounded-md border ${
+                  errorMessage
+                    ? 'border-red-400 focus:ring-2 focus:ring-red-500'
+                    : 'border-slate-300 focus:ring-2 focus:ring-slate-900'
+                } focus:outline-none focus:border-transparent text-slate-900 placeholder:text-slate-400`}
                 disabled={isSearching}
                 aria-label="Natural language satellite search query"
+                aria-invalid={Boolean(errorMessage)}
+                aria-describedby={errorMessage ? 'search-error-msg' : undefined}
               />
               <Search className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none" />
               <button
                 type="submit"
-                disabled={isSearching || !queryText.trim()}
+                disabled={isSearching}
                 className="absolute right-1.5 px-4 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 disabled:bg-slate-400 rounded transition-colors flex items-center gap-1.5"
                 aria-label="Search satellite data"
               >
@@ -291,6 +313,7 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
                   type="button"
                   onClick={() => {
                     setQueryText(sample);
+                    if (errorMessage) setErrorMessage(null);
                     handleRunSearch(undefined, sample);
                   }}
                   className="text-[11px] px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded transition-colors text-left"
@@ -311,7 +334,12 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
 
           {/* Error Message */}
           {errorMessage && (
-            <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded text-xs text-red-800 flex items-start gap-2">
+            <div
+              id="search-error-msg"
+              role="alert"
+              aria-live="assertive"
+              className="mt-3 p-3 bg-red-50 border border-red-200 rounded-md text-xs font-medium text-red-800 flex items-start gap-2"
+            >
               <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
               <span>{errorMessage}</span>
             </div>

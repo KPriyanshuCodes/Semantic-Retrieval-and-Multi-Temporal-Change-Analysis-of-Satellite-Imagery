@@ -918,10 +918,17 @@ app.post(['/api/satellite/search', '/satellite/search'], async (req, res) => {
 
         // Find thumbnail asset URL
         let thumbnailUrl = null;
-        if (feat.assets?.thumbnail?.href) {
+        if (feat.assets?.rendered_preview?.href) {
+          thumbnailUrl = feat.assets.rendered_preview.href;
+        } else if (feat.assets?.thumbnail?.href) {
           thumbnailUrl = `/api/satellite/thumbnail?url=${encodeURIComponent(feat.assets.thumbnail.href)}`;
         } else if (feat.assets?.quicklook?.href) {
           thumbnailUrl = `/api/satellite/thumbnail?url=${encodeURIComponent(feat.assets.quicklook.href)}`;
+        }
+
+        // Never serve .tif / .jp2 as web thumbnails; fall back to real satellite image snapshot
+        if (!thumbnailUrl || thumbnailUrl.endsWith('.tif') || thumbnailUrl.endsWith('.tiff') || thumbnailUrl.endsWith('.jp2')) {
+          thumbnailUrl = getRealSatelliteImageUrl(feat.bbox || bbox, 640, 440, 0);
         }
 
         const satellite = feat.id.startsWith('S2A')
@@ -1036,7 +1043,13 @@ async function executeMultiSearch(
           const acquisitionDate = datetime ? datetime.split('T')[0] : '2023-01-01';
           const satName = feat.id.startsWith('S2A') ? 'Sentinel-2A' : feat.id.startsWith('S2B') ? 'Sentinel-2B' : 'Sentinel-2';
           const assets = feat.assets || {};
-          const thumb = assets.rendered_preview?.href || assets.thumbnail?.href || assets.visual?.href || null;
+          let thumb = assets.rendered_preview?.href || assets.thumbnail?.href || assets.quicklook?.href || null;
+          if (thumb && (thumb.endsWith('.tif') || thumb.endsWith('.tiff') || thumb.endsWith('.jp2'))) {
+            thumb = null;
+          }
+          if (!thumb) {
+            thumb = getRealSatelliteImageUrl(feat.bbox || bbox, 640, 440, idx);
+          }
           return {
             id: feat.id,
             datetime,
@@ -1045,7 +1058,7 @@ async function executeMultiSearch(
             collection: 'sentinel-2-l2a',
             cloudCover,
             bbox: feat.bbox || bbox,
-            thumbnailUrl: thumb || getRealSatelliteImageUrl(feat.bbox || bbox, 640, 440, idx),
+            thumbnailUrl: thumb,
             productUrl: 'https://dataspace.copernicus.eu',
             isDemo: false,
             source: 'Copernicus Data Space Ecosystem (Sentinel-2 L2A)',
@@ -1117,7 +1130,13 @@ async function executeMultiSearch(
           const isL9 = f.id.startsWith('LC09');
           const satName = isL9 ? 'Landsat 9' : 'Landsat 8';
           const assets = f.assets || {};
-          const thumb = assets.rendered_preview?.href || assets.thumbnail?.href || assets.visual?.href || null;
+          let thumb = assets.rendered_preview?.href || assets.thumbnail?.href || null;
+          if (thumb && (thumb.endsWith('.tif') || thumb.endsWith('.tiff') || thumb.endsWith('.jp2'))) {
+            thumb = null;
+          }
+          if (!thumb) {
+            thumb = getRealSatelliteImageUrl(f.bbox || bbox, 640, 440, idx);
+          }
           return {
             id: f.id,
             datetime: f.properties?.datetime || `${startDate || '2023'}-06-15T05:14:17Z`,
@@ -1126,7 +1145,7 @@ async function executeMultiSearch(
             collection: 'landsat-c2-l2',
             cloudCover: Math.round(cc * 10) / 10,
             bbox: f.bbox || bbox,
-            thumbnailUrl: thumb || getRealSatelliteImageUrl(f.bbox || bbox, 640, 440, idx),
+            thumbnailUrl: thumb,
             productUrl: 'https://planetarycomputer.microsoft.com/dataset/landsat-c2-l2',
             isDemo: false,
             source: 'Google Earth Engine & USGS',
@@ -1769,7 +1788,7 @@ app.post(['/api/landsat/search', '/landsat/search'], async (req, res) => {
         collection: 'landsat-c2-l2',
         cloudCover: 2.8,
         bbox: [centerLon - 0.3, centerLat - 0.3, centerLon + 0.3, centerLat + 0.3],
-        thumbnailUrl: 'https://planetarycomputer.microsoft.com/api/data/v1/item/preview.png?collection=landsat-c2-l2&item=LC08_L2SP_145043_20230315_02_T1&assets=red&assets=green&assets=blue',
+        thumbnailUrl: getRealSatelliteImageUrl(bbox as [number, number, number, number], 640, 440, 0),
         productUrl: 'https://landsatlook.usgs.gov/',
         source: 'Google Earth Engine & USGS Landsat Collection 2',
         relevanceScore: 97,
@@ -1782,7 +1801,7 @@ app.post(['/api/landsat/search', '/landsat/search'], async (req, res) => {
         collection: 'landsat-c2-l2',
         cloudCover: 4.5,
         bbox: [centerLon - 0.3, centerLat - 0.3, centerLon + 0.3, centerLat + 0.3],
-        thumbnailUrl: 'https://planetarycomputer.microsoft.com/api/data/v1/item/preview.png?collection=landsat-c2-l2&item=LC09_L2SP_145043_20231020_02_T1&assets=red&assets=green&assets=blue',
+        thumbnailUrl: getRealSatelliteImageUrl(bbox as [number, number, number, number], 640, 440, 1),
         productUrl: 'https://landsatlook.usgs.gov/',
         source: 'Google Earth Engine & USGS Landsat Collection 2',
         relevanceScore: 94,
@@ -1795,7 +1814,7 @@ app.post(['/api/landsat/search', '/landsat/search'], async (req, res) => {
         collection: 'landsat-c2-l2',
         cloudCover: 1.9,
         bbox: [centerLon - 0.3, centerLat - 0.3, centerLon + 0.3, centerLat + 0.3],
-        thumbnailUrl: 'https://planetarycomputer.microsoft.com/api/data/v1/item/preview.png?collection=landsat-c2-l2&item=LC08_L2SP_145043_20240318_02_T1&assets=red&assets=green&assets=blue',
+        thumbnailUrl: getRealSatelliteImageUrl(bbox as [number, number, number, number], 640, 440, 2),
         productUrl: 'https://landsatlook.usgs.gov/',
         source: 'Google Earth Engine & USGS Landsat Collection 2',
         relevanceScore: 98,
@@ -1808,7 +1827,7 @@ app.post(['/api/landsat/search', '/landsat/search'], async (req, res) => {
         collection: 'landsat-c2-l2',
         cloudCover: 5.2,
         bbox: [centerLon - 0.3, centerLat - 0.3, centerLon + 0.3, centerLat + 0.3],
-        thumbnailUrl: 'https://planetarycomputer.microsoft.com/api/data/v1/item/preview.png?collection=landsat-c2-l2&item=LC09_L2SP_145043_20241102_02_T1&assets=red&assets=green&assets=blue',
+        thumbnailUrl: getRealSatelliteImageUrl(bbox as [number, number, number, number], 640, 440, 3),
         productUrl: 'https://landsatlook.usgs.gov/',
         source: 'Google Earth Engine & USGS Landsat Collection 2',
         relevanceScore: 92,

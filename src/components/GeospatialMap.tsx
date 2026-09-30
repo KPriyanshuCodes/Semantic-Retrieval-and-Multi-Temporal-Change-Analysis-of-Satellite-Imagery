@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { AnalysisResult, SatelliteScene } from '../types';
 import { GoogleGeospatialMap } from './GoogleGeospatialMap';
+import { getRealSatelliteImageUrl } from '../utils/clientFallbackSearch';
 
 interface GeospatialMapProps {
   aoiBbox: [number, number, number, number] | null; // [minLon, minLat, maxLon, maxLat]
@@ -226,20 +227,28 @@ export const GeospatialMap: React.FC<GeospatialMapProps> = ({
       [maxLat, maxLon],
     ];
 
-    if (visualizationMode === 'before' && beforeScene?.thumbnailUrl) {
-      const overlay = L.imageOverlay(beforeScene.thumbnailUrl, imgBounds, {
-        opacity: 0.85,
+    if (visualizationMode === 'before' && beforeScene) {
+      const initialSrc = beforeScene.thumbnailUrl || getRealSatelliteImageUrl(boundsTarget, 800, 600, 0);
+      const overlay = L.imageOverlay(initialSrc, imgBounds, {
+        opacity: layerOpacity,
         interactive: false,
       }).addTo(map);
+      overlay.on('error', () => {
+        overlay.setUrl(getRealSatelliteImageUrl(boundsTarget, 800, 600, 0));
+      });
       beforeImageLayerRef.current = overlay;
-    } else if (visualizationMode === 'after' && afterScene?.thumbnailUrl) {
-      const overlay = L.imageOverlay(afterScene.thumbnailUrl, imgBounds, {
-        opacity: 0.85,
+    } else if (visualizationMode === 'after' && afterScene) {
+      const initialSrc = afterScene.thumbnailUrl || getRealSatelliteImageUrl(boundsTarget, 800, 600, 1);
+      const overlay = L.imageOverlay(initialSrc, imgBounds, {
+        opacity: layerOpacity,
         interactive: false,
       }).addTo(map);
+      overlay.on('error', () => {
+        overlay.setUrl(getRealSatelliteImageUrl(boundsTarget, 800, 600, 1));
+      });
       afterImageLayerRef.current = overlay;
     }
-  }, [visualizationMode, beforeScene, afterScene, aoiBbox, mapEngine]);
+  }, [visualizationMode, beforeScene, afterScene, aoiBbox, mapEngine, layerOpacity]);
 
   // Update Leaflet Change Detection Grid Layer
   useEffect(() => {
@@ -385,15 +394,21 @@ export const GeospatialMap: React.FC<GeospatialMapProps> = ({
             style={{ width: `${swipePosition}%` }}
           >
             <div className="relative w-full h-full bg-slate-900">
-              {beforeScene?.thumbnailUrl ? (
+              {beforeScene ? (
                 <img
-                  src={beforeScene.thumbnailUrl}
+                  src={beforeScene.thumbnailUrl || getRealSatelliteImageUrl(beforeScene.bbox || aoiBbox || [77.2, 23.1, 77.5, 23.4], 800, 600, 0)}
                   alt={`Before scene acquired ${beforeScene.acquisitionDate}`}
                   className="w-full h-full object-cover"
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    target.onerror = null;
+                    const bbox = beforeScene.bbox || aoiBbox || [77.2, 23.1, 77.5, 23.4];
+                    target.src = getRealSatelliteImageUrl(bbox, 800, 600, 0);
+                  }}
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-slate-400 text-xs">
-                  Baseline Satellite Observation ({beforeScene?.acquisitionDate || 'T1'})
+                  Baseline Satellite Observation (T1)
                 </div>
               )}
               {/* Badge */}
@@ -411,15 +426,21 @@ export const GeospatialMap: React.FC<GeospatialMapProps> = ({
 
           {/* Right Panel: Later Observation */}
           <div className="w-full h-full bg-slate-900">
-            {afterScene?.thumbnailUrl ? (
+            {afterScene ? (
               <img
-                src={afterScene.thumbnailUrl}
+                src={afterScene.thumbnailUrl || getRealSatelliteImageUrl(afterScene.bbox || aoiBbox || [77.2, 23.1, 77.5, 23.4], 800, 600, 1)}
                 alt={`After scene acquired ${afterScene.acquisitionDate}`}
                 className="w-full h-full object-cover"
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  target.onerror = null;
+                  const bbox = afterScene.bbox || aoiBbox || [77.2, 23.1, 77.5, 23.4];
+                  target.src = getRealSatelliteImageUrl(bbox, 800, 600, 1);
+                }}
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center text-slate-400 text-xs">
-                Comparison Satellite Observation ({afterScene?.acquisitionDate || 'T2'})
+                Comparison Satellite Observation (T2)
               </div>
             )}
             {/* Badge */}

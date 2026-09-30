@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   APIProvider,
   Map,
@@ -8,6 +8,9 @@ import {
   useMap,
 } from '@vis.gl/react-google-maps';
 import { AnalysisResult, SatelliteScene } from '../types';
+import { getRealSatelliteImageUrl } from '../utils/clientFallbackSearch';
+
+declare const google: any;
 
 interface GoogleGeospatialMapProps {
   apiKey: string;
@@ -23,6 +26,57 @@ interface GoogleGeospatialMapProps {
   showAoiLayer: boolean;
   layerOpacity: number;
   resetBoundsSignal?: number;
+}
+
+// Ground overlay component for Google Maps
+function GoogleGroundOverlay({
+  imageUrl,
+  bbox,
+  opacity = 0.85,
+  visible = true,
+}: {
+  imageUrl?: string | null;
+  bbox?: [number, number, number, number] | null;
+  opacity?: number;
+  visible?: boolean;
+}) {
+  const map = useMap();
+  const overlayRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (overlayRef.current) {
+      overlayRef.current.setMap(null);
+      overlayRef.current = null;
+    }
+
+    if (!map || !imageUrl || !bbox || !visible) return;
+
+    try {
+      const [minLon, minLat, maxLon, maxLat] = bbox;
+      const bounds = new google.maps.LatLngBounds(
+        new google.maps.LatLng(minLat, minLon),
+        new google.maps.LatLng(maxLat, maxLon)
+      );
+
+      const overlay = new google.maps.GroundOverlay(imageUrl, bounds, {
+        opacity,
+        clickable: false,
+      });
+      overlay.setMap(map);
+      overlayRef.current = overlay;
+    } catch (err) {
+      console.warn('Could not create Google Maps GroundOverlay:', err);
+    }
+
+    return () => {
+      if (overlayRef.current) {
+        overlayRef.current.setMap(null);
+        overlayRef.current = null;
+      }
+    };
+  }, [map, imageUrl, bbox, opacity, visible]);
+
+  return null;
 }
 
 // Controller component to smoothly pan and fit bounds
@@ -113,6 +167,26 @@ export const GoogleGeospatialMap: React.FC<GoogleGeospatialMapProps> = ({
             strokeWeight={2}
             fillColor="#0ea5e9"
             fillOpacity={visualizationMode === 'change' ? 0.08 : 0.02}
+          />
+        )}
+
+        {/* Before Scene Satellite Ground Overlay */}
+        {visualizationMode === 'before' && beforeScene && (
+          <GoogleGroundOverlay
+            imageUrl={beforeScene.thumbnailUrl || getRealSatelliteImageUrl(beforeScene.bbox || aoiBbox || [77.2, 23.1, 77.5, 23.4], 800, 600, 0)}
+            bbox={beforeScene.bbox || aoiBbox}
+            opacity={layerOpacity}
+            visible={true}
+          />
+        )}
+
+        {/* After Scene Satellite Ground Overlay */}
+        {visualizationMode === 'after' && afterScene && (
+          <GoogleGroundOverlay
+            imageUrl={afterScene.thumbnailUrl || getRealSatelliteImageUrl(afterScene.bbox || aoiBbox || [77.2, 23.1, 77.5, 23.4], 800, 600, 1)}
+            bbox={afterScene.bbox || aoiBbox}
+            opacity={layerOpacity}
+            visible={true}
           />
         )}
 
