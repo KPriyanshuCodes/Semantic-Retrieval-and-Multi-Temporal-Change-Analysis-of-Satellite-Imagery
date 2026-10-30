@@ -103,4 +103,3 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 - **Data Minimisation**: No personal identification, phone numbers, or passwords are collected.
 - **Transparent Consent**: Interactive cookie management separating essential functionality from optional analytics.
 - **Data Deletion**: Complete "Delete Search History" and "Purge Data" controls accessible via the UI.
-- **Prototype Legal Disclaimer**: *Privacy controls are designed with Indian data-protection requirements in mind and should be reviewed for legal compliance before production deployment.*
